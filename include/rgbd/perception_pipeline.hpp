@@ -8,16 +8,17 @@
 
 namespace rgbd {
 
-/// Synchronous use-case pipeline. Thread scheduling and bounded queues belong to the application layer.
 class PerceptionPipeline {
-public:
-    PerceptionPipeline(IObjectDetector& detector, const IDepthEstimator& depth_estimator) noexcept;
+ public:
+  PerceptionPipeline(IObjectDetector& detector,
+                     const IDepthEstimator& depth_estimator) noexcept;
 
-    [[nodiscard]] std::vector<ObjectObservation> process(const FrameSet& frame) const;
+  [[nodiscard]] std::vector<ObjectObservation> process(
+      const FrameSet& frame) const;
 
-private:
-    IObjectDetector& detector_;
-    const IDepthEstimator& depth_estimator_;
+ private:
+  IObjectDetector& detector_;
+  const IDepthEstimator& depth_estimator_;
 };
 
 }  // namespace rgbd

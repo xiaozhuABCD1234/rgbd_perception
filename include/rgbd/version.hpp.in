@@ -6,4 +6,4 @@ namespace rgbd {
 
 inline constexpr std::string_view kVersion = "@PROJECT_VERSION@";
 
-}  // namespace rgbd
+}

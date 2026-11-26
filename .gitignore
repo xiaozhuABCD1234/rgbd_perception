@@ -1,9 +1,6 @@
-# CMake and build output
 /build/
 cmake-build-*/
 CMakeUserPresets.json
-
-# Compiled objects and binaries
 *.o
 *.obj
 *.a
@@ -13,24 +10,17 @@ CMakeUserPresets.json
 *.dll
 *.exe
 *.pdb
-
-# Editor and OS files
 .vscode/
 .idea/
 *.swp
 *~
 .DS_Store
-
-# Tooling
 .cache/
 compile_commands.json
 .clangd/
-
-# Runtime output
 /output/
 /recordings/
 *.log
-
-# Python tooling used by hooks
+.venv/
 __pycache__/
 *.py[cod]
