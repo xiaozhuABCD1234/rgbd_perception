@@ -71,6 +71,20 @@ just gemini305
 just d435i
 ```
 
+## 官方 YOLO26 模型
+
+Ultralytics 在 `v8.4.0` Release 中提供官方 ONNX 权重，可直接被本项目的 OpenVINO 后端加载：
+
+```bash
+mkdir -p models
+curl -L --fail -o models/yolo26n-seg.onnx \
+  https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n-seg.onnx
+curl -L --fail -o models/yolo26n.onnx \
+  https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo26n.onnx
+```
+
+`yolo26n-seg.onnx` 用于实例分割，`yolo26n.onnx` 用于检测。类别名使用仓库内的 `config/coco.txt`。模型文件较大，`models/` 已在 `.gitignore` 中忽略。YOLO26 权重和代码遵循 Ultralytics AGPL-3.0 License。
+
 ## 相机 URI
 
 ```text
@@ -119,7 +133,7 @@ YAML 只保存深度相机参数，由 `rgbd_viewer` 和 `rgbd_lichtblick` 共�
 ```bash
 rgbd_viewer --frames 100
 rgbd_viewer "d435i://?width=640&height=480&fps=30" --frames 100
-rgbd_viewer --model models/yolo26n-seg.onnx --labels models/coco.txt --device GPU
+rgbd_viewer --model models/yolo26n-seg.onnx --labels config/coco.txt --device GPU
 rgbd_replay build/session.rgbd
 ```
 
@@ -163,7 +177,7 @@ just lichtblick-setup
 
 ```bash
 ./build/gemini305/rgbd_lichtblick \
-  --model models/yolo26n-seg.onnx --labels models/coco.txt --device GPU
+  --model models/yolo26n-seg.onnx --labels config/coco.txt --device GPU
 ```
 
 聚类参数示例：
