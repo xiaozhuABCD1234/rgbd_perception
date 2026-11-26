@@ -258,6 +258,11 @@ std::unique_ptr<IDepthCamera> CreateCamera(const CameraConfig& config) {
     orbbec.color_height = config.color.height;
     orbbec.color_fps = config.color.fps;
     orbbec.align_depth_to_color = config.align_depth_to_color;
+    orbbec.depth_auto_exposure = config.depth_control.auto_exposure;
+    orbbec.depth_exposure_us = config.depth_control.exposure_us;
+    orbbec.depth_gain = config.depth_control.gain;
+    orbbec.disparity_search_range = config.depth_control.disparity_search_range;
+    orbbec.ae_max_exposure_us = config.depth_control.ae_max_exposure_us;
     return CreateOrbbecCamera(std::move(orbbec));
 #else
     throw std::runtime_error("gemini305 backend is not built");

@@ -6,8 +6,6 @@
 
 namespace rgbd {
 
-class Config;
-
 struct LoggingConfig {
   std::string level = "info";
   std::string pattern = "[%Y-%m-%d %H:%M:%S.%e] [%l] %v";
@@ -16,7 +14,6 @@ struct LoggingConfig {
   std::size_t threads = 1;
 };
 
-[[nodiscard]] LoggingConfig LoadLoggingConfig(const Config& config);
 void InitializeLogging(const LoggingConfig& config);
 void ShutdownLogging();
 

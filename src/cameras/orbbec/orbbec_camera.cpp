@@ -18,6 +18,19 @@ namespace {
 constexpr float kMillimetresPerMetre = 1000.0F;
 constexpr std::size_t kDepthSampleBytes = sizeof(std::uint16_t);
 
+int DisparitySearchMode(int range) {
+  if (range == 64) {
+    return 0;
+  }
+  if (range == 128) {
+    return 1;
+  }
+  if (range == 256) {
+    return 2;
+  }
+  throw std::invalid_argument("disparity_search_range must be 64, 128 or 256");
+}
+
 std::string DeviceSerial(const ob::Device& device) {
   const auto info = device.getDeviceInfo();
   if (info == nullptr) {
@@ -87,6 +100,11 @@ class OrbbecCamera final : public IDepthCamera {
       throw std::invalid_argument(
           "orbbec camera requires an ID and valid stream profiles");
     }
+    if (config_.depth_exposure_us <= 0 || config_.depth_gain <= 0 ||
+        config_.ae_max_exposure_us <= 0) {
+      throw std::invalid_argument("orbbec exposure and gain must be positive");
+    }
+    DisparitySearchMode(config_.disparity_search_range);
   }
 
   ~OrbbecCamera() override { Close(); }
@@ -126,6 +144,12 @@ class OrbbecCamera final : public IDepthCamera {
     }
     pipeline_->start(stream_config_);
     streaming_ = true;
+    try {
+      ApplyControls();
+    } catch (...) {
+      Stop();
+      throw;
+    }
   }
 
   void Stop() override {
@@ -204,6 +228,45 @@ class OrbbecCamera final : public IDepthCamera {
   }
 
  private:
+  void SetIntChecked(OBPropertyID property, int value, const char* name) const {
+    if (!device_->isPropertySupported(property, OB_PERMISSION_WRITE)) {
+      throw std::runtime_error(std::string(name) + " is not supported");
+    }
+    const OBIntPropertyRange range = device_->getIntPropertyRange(property);
+    if (value < range.min || value > range.max) {
+      throw std::invalid_argument(std::string(name) + " must be in [" +
+                                  std::to_string(range.min) + ", " +
+                                  std::to_string(range.max) + "]");
+    }
+    device_->setIntProperty(property, value);
+  }
+
+  void ApplyControls() const {
+    if (!device_->isPropertySupported(OB_PROP_DEPTH_AUTO_EXPOSURE_BOOL,
+                                      OB_PERMISSION_WRITE)) {
+      throw std::runtime_error("depth auto exposure is not supported");
+    }
+    device_->setBoolProperty(OB_PROP_DEPTH_AUTO_EXPOSURE_BOOL,
+                             config_.depth_auto_exposure);
+    if (config_.depth_auto_exposure) {
+      SetIntChecked(OB_PROP_IR_AE_MAX_EXPOSURE_INT, config_.ae_max_exposure_us,
+                    "ae_max_exposure_us");
+    } else {
+      SetIntChecked(OB_PROP_DEPTH_EXPOSURE_INT, config_.depth_exposure_us,
+                    "exposure_us");
+      SetIntChecked(OB_PROP_DEPTH_GAIN_INT, config_.depth_gain, "gain");
+    }
+    if (!device_->isPropertySupported(OB_PROP_DISP_SEARCH_RANGE_MODE_INT,
+                                      OB_PERMISSION_WRITE)) {
+      throw std::runtime_error("disparity search range is not supported");
+    }
+    const int mode = DisparitySearchMode(config_.disparity_search_range);
+    device_->setIntProperty(OB_PROP_DISP_SEARCH_RANGE_MODE_INT, mode);
+    if (device_->getIntProperty(OB_PROP_DISP_SEARCH_RANGE_MODE_INT) != mode) {
+      throw std::runtime_error("failed to apply disparity search range");
+    }
+  }
+
   std::shared_ptr<ob::Device> SelectDevice() const {
     auto list = context_->queryDeviceList();
     if (list == nullptr) {

@@ -25,12 +25,21 @@ struct CameraStreamConfig {
   std::string format = "y16";
 };
 
+struct CameraDepthControlConfig {
+  bool auto_exposure = true;
+  int exposure_us = 15600;
+  int gain = 16;
+  int disparity_search_range = 128;
+  int ae_max_exposure_us = 30158;
+};
+
 struct CameraConfig {
   std::string backend = "gemini305";
   std::string id = "gemini305";
   std::string serial;
   CameraStreamConfig depth{848, 530, 30, "y16"};
   CameraStreamConfig color{848, 530, 30, "rgb8"};
+  CameraDepthControlConfig depth_control;
   bool align_depth_to_color = true;
   std::string source;
   bool loop = false;

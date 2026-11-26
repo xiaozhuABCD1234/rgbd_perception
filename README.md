@@ -95,6 +95,11 @@ camera:
     height: 530
     fps: 30
     format: y16
+    auto_exposure: true
+    exposure_us: 15600
+    gain: 16
+    disparity_search_range: 128
+    ae_max_exposure_us: 30158
   color:
     width: 848
     height: 530
@@ -102,38 +107,9 @@ camera:
     format: rgb8
   align_depth_to_color: true
   timeout_ms: 1000
-
-logging:
-  level: info
-  pattern: "[%Y-%m-%d %H:%M:%S.%e] [%l] %v"
-  file: ""
-  queue_size: 8192
-  threads: 1
-
-lichtblick:
-  websocket_port: 8765
-  http_port: 8080
-  web_root: data/lichtblick-web
-
-replay:
-  path: ""
-  loop: false
-  timeout_ms: 1000
-
-algorithm:
-  recognition:
-    label: "object"
-    scale: 0.5
-    confidence: 1.0
-  depth:
-    roi_scale: 0.75
-    min_valid_pixels: 5
-    min_depth_m: 0.04
-    max_depth_m: 1.0
-    mad_scale: 3.0
 ```
 
-`camera` 被 `rgbd_viewer` 和 `rgbd_lichtblick` 共用。Gemini 305 默认使用手册中的 848 x 530 @ 30fps、深度 Y16、彩色 RGB8 和 D2C 对齐，深度算法范围对应手册的 4–100cm 工作范围。`algorithm.recognition` 配置 `CenterBoxRecognizer`，`algorithm.depth` 配置 `RobustDepthFusionEstimator`。日志使用异步 spdlog，`logging.file` 为空时输出到 `stderr`，`queue_size` 和 `threads` 控制异步队列与工作线程。
+YAML 只保存深度相机参数，由 `rgbd_viewer` 和 `rgbd_lichtblick` 共用。Gemini 305 默认使用手册中的 848 x 530 @ 30fps、深度 Y16、彩色 RGB8、D2C 对齐、自动曝光、增益 16 和视差搜索范围 128；算法参数写死在 `apps/` 中，异步日志使用 `stderr`。`rgbd_viewer <uri>` 和 `rgbd_lichtblick --camera <uri>` 可以临时覆盖结构化配置。
 
 ## 应用
 

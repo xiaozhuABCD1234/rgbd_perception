@@ -7,8 +7,6 @@
 
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/core/config.hpp"
-#include "rgbd/core/depth_estimator.hpp"
-#include "rgbd/recognition/center_box_recognizer.hpp"
 
 namespace rgbd {
 namespace app {
@@ -85,6 +83,18 @@ inline CameraOptions LoadCameraOptions(const Config& config) {
       LoadPositiveInt(config, "camera.depth.fps", camera.depth.fps);
   camera.depth.format =
       config.GetString("camera.depth.format", camera.depth.format);
+  camera.depth_control.auto_exposure = config.GetBool(
+      "camera.depth.auto_exposure", camera.depth_control.auto_exposure);
+  camera.depth_control.exposure_us = LoadPositiveInt(
+      config, "camera.depth.exposure_us", camera.depth_control.exposure_us);
+  camera.depth_control.gain =
+      LoadPositiveInt(config, "camera.depth.gain", camera.depth_control.gain);
+  camera.depth_control.disparity_search_range =
+      LoadPositiveInt(config, "camera.depth.disparity_search_range",
+                      camera.depth_control.disparity_search_range);
+  camera.depth_control.ae_max_exposure_us =
+      LoadPositiveInt(config, "camera.depth.ae_max_exposure_us",
+                      camera.depth_control.ae_max_exposure_us);
   camera.color.width = static_cast<std::size_t>(LoadPositiveInt(
       config, "camera.color.width", static_cast<int>(camera.color.width)));
   camera.color.height = static_cast<std::size_t>(LoadPositiveInt(
@@ -116,39 +126,13 @@ inline std::string DescribeCamera(const CameraConfig& camera) {
          " color=" + std::to_string(camera.color.width) + "x" +
          std::to_string(camera.color.height) + "@" +
          std::to_string(camera.color.fps) + "fps/" + camera.color.format +
-         " align=" + (camera.align_depth_to_color ? "true" : "false");
-}
-
-struct AlgorithmOptions {
-  CenterBoxRecognizerConfig recognizer;
-  DepthFusionConfig depth;
-};
-
-inline AlgorithmOptions LoadAlgorithmOptions(const Config& config) {
-  AlgorithmOptions options;
-  options.recognizer.label =
-      config.GetString("algorithm.recognition.label", options.recognizer.label);
-  options.recognizer.scale =
-      config.GetFloat("algorithm.recognition.scale", options.recognizer.scale);
-  options.recognizer.confidence = config.GetFloat(
-      "algorithm.recognition.confidence", options.recognizer.confidence);
-  options.depth.roi_scale =
-      config.GetFloat("algorithm.depth.roi_scale", options.depth.roi_scale);
-  const int min_valid_pixels =
-      config.GetInt("algorithm.depth.min_valid_pixels",
-                    static_cast<int>(options.depth.min_valid_pixels));
-  if (min_valid_pixels <= 0) {
-    throw std::invalid_argument(
-        "algorithm.depth.min_valid_pixels must be positive");
-  }
-  options.depth.min_valid_pixels = static_cast<std::size_t>(min_valid_pixels);
-  options.depth.min_depth_m =
-      config.GetFloat("algorithm.depth.min_depth_m", options.depth.min_depth_m);
-  options.depth.max_depth_m =
-      config.GetFloat("algorithm.depth.max_depth_m", options.depth.max_depth_m);
-  options.depth.mad_scale =
-      config.GetFloat("algorithm.depth.mad_scale", options.depth.mad_scale);
-  return options;
+         " align=" + (camera.align_depth_to_color ? "true" : "false") +
+         " exposure=" +
+         (camera.depth_control.auto_exposure
+              ? "auto"
+              : std::to_string(camera.depth_control.exposure_us) + "us") +
+         " gain=" + std::to_string(camera.depth_control.gain) + " disparity=" +
+         std::to_string(camera.depth_control.disparity_search_range);
 }
 
 }  // namespace app

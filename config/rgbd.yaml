@@ -7,6 +7,11 @@ camera:
     height: 530
     fps: 30
     format: y16
+    auto_exposure: true
+    exposure_us: 15600
+    gain: 16
+    disparity_search_range: 128
+    ae_max_exposure_us: 30158
   color:
     width: 848
     height: 530
@@ -14,32 +19,3 @@ camera:
     format: rgb8
   align_depth_to_color: true
   timeout_ms: 1000
-
-logging:
-  level: info
-  pattern: "[%Y-%m-%d %H:%M:%S.%e] [%l] %v"
-  file: ""
-  queue_size: 8192
-  threads: 1
-
-lichtblick:
-  websocket_port: 8765
-  http_port: 8080
-  web_root: data/lichtblick-web
-
-replay:
-  path: ""
-  loop: false
-  timeout_ms: 1000
-
-algorithm:
-  recognition:
-    label: "object"
-    scale: 0.5
-    confidence: 1.0
-  depth:
-    roi_scale: 0.75
-    min_valid_pixels: 5
-    min_depth_m: 0.04
-    max_depth_m: 1.0
-    mad_scale: 3.0

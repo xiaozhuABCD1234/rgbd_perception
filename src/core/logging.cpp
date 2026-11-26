@@ -12,8 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include "rgbd/core/config.hpp"
-
 namespace rgbd {
 
 namespace {
@@ -21,24 +19,6 @@ namespace {
 std::atomic<bool> g_logging_initialized{false};
 
 }  // namespace
-
-LoggingConfig LoadLoggingConfig(const Config& config) {
-  LoggingConfig logging;
-  logging.level = config.GetString("logging.level", logging.level);
-  logging.pattern = config.GetString("logging.pattern", logging.pattern);
-  logging.file = config.GetString("logging.file", logging.file);
-  const int queue_size =
-      config.GetInt("logging.queue_size", static_cast<int>(logging.queue_size));
-  const int threads =
-      config.GetInt("logging.threads", static_cast<int>(logging.threads));
-  if (queue_size <= 0 || threads <= 0) {
-    throw std::invalid_argument(
-        "logging queue_size and threads must be positive");
-  }
-  logging.queue_size = static_cast<std::size_t>(queue_size);
-  logging.threads = static_cast<std::size_t>(threads);
-  return logging;
-}
 
 void InitializeLogging(const LoggingConfig& config) {
   if (g_logging_initialized.exchange(true)) {

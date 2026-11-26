@@ -36,15 +36,6 @@ Options LoadOptions(const rgbd::Config& config) {
   const rgbd::app::CameraOptions camera = rgbd::app::LoadCameraOptions(config);
   options.camera = camera.camera;
   options.timeout_ms = camera.timeout_ms;
-  options.port = config.GetInt("lichtblick.websocket_port", options.port);
-  options.http_port = config.GetInt("lichtblick.http_port", options.http_port);
-  options.web_root = config.GetString("lichtblick.web_root", options.web_root);
-  if (options.port <= 0 || options.http_port <= 0) {
-    throw std::invalid_argument("Lichtblick ports must be positive");
-  }
-  if (options.web_root.empty()) {
-    throw std::invalid_argument("lichtblick.web_root must not be empty");
-  }
   return options;
 }
 
@@ -104,7 +95,7 @@ int main(int argc, char** argv) {
         rgbd::app::ParseConfigArgument(argc, argv);
     rgbd::Config config;
     rgbd::app::LoadConfig(config, config_argument);
-    rgbd::InitializeLogging(rgbd::LoadLoggingConfig(config));
+    rgbd::InitializeLogging(rgbd::LoggingConfig{});
     const Options options = ParseOptions(argc, argv, LoadOptions(config));
 
     auto camera = options.camera_uri.empty()

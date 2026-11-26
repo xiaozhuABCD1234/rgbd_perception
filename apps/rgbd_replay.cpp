@@ -6,7 +6,6 @@
 #include <string>
 
 #include "app_support.hpp"
-#include "rgbd/core/config.hpp"
 #include "rgbd/core/depth_estimator.hpp"
 #include "rgbd/core/logging.hpp"
 #include "rgbd/core/perception_pipeline.hpp"
@@ -23,26 +22,11 @@ struct Options {
   int timeout_ms = 1000;
 };
 
-Options LoadOptions(const rgbd::Config& config) {
-  Options options;
-  options.path = config.GetString("replay.path");
-  options.loop = config.GetBool("replay.loop", options.loop);
-  options.timeout_ms = config.GetInt("replay.timeout_ms", options.timeout_ms);
-  if (options.timeout_ms <= 0) {
-    throw std::invalid_argument("replay.timeout_ms must be positive");
-  }
-  return options;
-}
-
 Options ParseOptions(int argc, char** argv, Options options) {
   bool path_set = false;
   for (int index = 1; index < argc; ++index) {
     const std::string argument(argv[index]);
     if (argument == "--") {
-      continue;
-    }
-    if (argument == "--config") {
-      ++index;
       continue;
     }
     if (argument == "--frames") {
@@ -88,21 +72,17 @@ void PrintObservation(const rgbd::ObjectObservation& observation) {
 
 int main(int argc, char** argv) {
   try {
-    const rgbd::app::ConfigArgument config_argument =
-        rgbd::app::ParseConfigArgument(argc, argv);
-    rgbd::Config config;
-    rgbd::app::LoadConfig(config, config_argument);
-    rgbd::InitializeLogging(rgbd::LoadLoggingConfig(config));
-    const Options options = ParseOptions(argc, argv, LoadOptions(config));
-    const rgbd::app::AlgorithmOptions algorithm =
-        rgbd::app::LoadAlgorithmOptions(config);
+    rgbd::InitializeLogging(rgbd::LoggingConfig{});
+    const Options options = ParseOptions(argc, argv, Options{});
 
     rgbd::ReplayCameraConfig camera_config;
     camera_config.path = options.path;
     camera_config.loop = options.loop;
     rgbd::ReplayCamera camera(camera_config);
-    rgbd::CenterBoxRecognizer recognizer(algorithm.recognizer);
-    rgbd::RobustDepthFusionEstimator depth_estimator(algorithm.depth);
+    rgbd::CenterBoxRecognizer recognizer(
+        rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
+    rgbd::RobustDepthFusionEstimator depth_estimator(
+        rgbd::DepthFusionConfig{0.75F, 5, 0.04F, 1.0F, 3.0F});
     rgbd::PerceptionPipeline pipeline(recognizer, depth_estimator);
 
     rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));
