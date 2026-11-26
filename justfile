@@ -72,7 +72,15 @@ install: build
     cmake --install build/dev --prefix "$PWD/build/stage"
 
 submodules:
+    #!/usr/bin/env bash
+    set -euo pipefail
     git submodule update --init --recursive
+    if [[ ! -f third_party/librealsense/CMakeLists.txt ]]; then
+        git submodule add -f https://github.com/IntelRealSense/librealsense.git third_party/librealsense
+    fi
+    if [[ ! -f third_party/mcap/README.md ]]; then
+        git submodule add -f https://github.com/foxglove/mcap.git third_party/mcap
+    fi
 
 gemini305 uri="gemini305://?width=640&height=480&fps=30" *args: sdk
     cmake --preset gemini305
@@ -80,7 +88,12 @@ gemini305 uri="gemini305://?width=640&height=480&fps=30" *args: sdk
     ./build/gemini305/rgbd_viewer "{{uri}}" {{args}}
 
 d435i uri="d435i://?width=640&height=480&fps=30" *args:
-    git submodule update --init -- third_party/librealsense
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ ! -f third_party/librealsense/CMakeLists.txt ]]; then
+        git submodule add -f https://github.com/IntelRealSense/librealsense.git third_party/librealsense
+    fi
+    git submodule update --init --recursive -- third_party/librealsense
     cmake --preset d435i
     cmake --build --preset d435i --parallel
     ./build/d435i/rgbd_viewer "{{uri}}" {{args}}
