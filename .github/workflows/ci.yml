@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends cmake ninja-build g++ clang-format python3
+
+      - name: Configure
+        run: cmake --preset dev
+
+      - name: Build
+        run: cmake --build --preset dev --parallel
+
+      - name: Test
+        run: ctest --preset dev
+
+      - name: Check formatting
+        run: |
+          find apps include src tests -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.in' \) -print0 \
+            | xargs -0 clang-format --dry-run --Werror
+
+      - name: Check commit messages
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/check_commit_range.py "origin/${{ github.base_ref }}..HEAD"
