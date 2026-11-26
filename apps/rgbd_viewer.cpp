@@ -13,15 +13,10 @@
 #include "rgbd/core/config.hpp"
 #include "rgbd/core/depth_estimator.hpp"
 #include "rgbd/core/logging.hpp"
+#include "rgbd/core/object_geometry.hpp"
 #include "rgbd/core/perception_pipeline.hpp"
 #include "rgbd/io/recording.hpp"
-#include "rgbd/recognition/center_box_recognizer.hpp"
 #include "rgbd/version.hpp"
-
-#ifdef RGBD_WITH_OPENVINO
-#include "rgbd/inference/openvino_engine.hpp"
-#include "rgbd/recognition/yolo26_recognizer.hpp"
-#endif
 
 namespace {
 
@@ -40,6 +35,9 @@ struct Options {
   int input_size = 640;
   float confidence = 0.25F;
   float iou = 0.45F;
+  int cluster_stride = 2;
+  float cluster_voxel_m = 0.025F;
+  int min_cluster_points = 20;
 };
 
 Options LoadOptions(const rgbd::Config& config) {
@@ -97,6 +95,27 @@ Options ParseOptions(int argc, char** argv, Options options) {
       if (options.iou < 0.0F || options.iou > 1.0F) {
         throw std::invalid_argument("--iou must be in [0, 1]");
       }
+    } else if (argument == "--cluster-stride") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--cluster-stride requires a value");
+      }
+      options.cluster_stride =
+          rgbd::app::ParsePositiveInt(argv[index], "--cluster-stride");
+    } else if (argument == "--cluster-voxel") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--cluster-voxel requires a value");
+      }
+      options.cluster_voxel_m =
+          rgbd::app::ParseFloat(argv[index], "--cluster-voxel");
+      if (options.cluster_voxel_m <= 0.0F) {
+        throw std::invalid_argument("--cluster-voxel must be positive");
+      }
+    } else if (argument == "--min-cluster-points") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--min-cluster-points requires a value");
+      }
+      options.min_cluster_points =
+          rgbd::app::ParsePositiveInt(argv[index], "--min-cluster-points");
     } else if (argument == "--frames") {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");
@@ -133,6 +152,13 @@ void PrintObservation(const rgbd::ObjectObservation& observation) {
     std::cout << std::fixed << std::setprecision(4) << " xyz=(" << position.x
               << ", " << position.y << ", " << position.z << ")";
   }
+  if (observation.geometry) {
+    const rgbd::OrientedBox& box = observation.geometry->box;
+    std::cout << std::fixed << std::setprecision(4) << " center=("
+              << box.center.x << ", " << box.center.y << ", " << box.center.z
+              << ") size=(" << box.size.x << ", " << box.size.y << ", "
+              << box.size.z << ") points=" << observation.geometry->point_count;
+  }
   std::cout << '\n';
 }
 
@@ -149,31 +175,29 @@ int main(int argc, char** argv) {
     auto camera = options.camera_uri.empty()
                       ? rgbd::CreateCamera(options.camera)
                       : rgbd::CreateCameraFromUri(options.camera_uri);
-    std::unique_ptr<rgbd::IVisionRecognizer> recognizer;
-    if (options.model_path.empty()) {
-      recognizer = std::make_unique<rgbd::CenterBoxRecognizer>(
-          rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
-    } else {
-#ifdef RGBD_WITH_OPENVINO
-      auto engine = std::make_shared<rgbd::OpenVinoEngine>(
-          rgbd::OpenVinoConfig{options.device});
-      engine->Load(options.model_path);
-      rgbd::Yolo26Config yolo_config;
-      yolo_config.labels = rgbd::app::LoadLabels(options.labels_path);
-      yolo_config.input_width = options.input_size;
-      yolo_config.input_height = options.input_size;
-      yolo_config.confidence_threshold = options.confidence;
-      yolo_config.iou_threshold = options.iou;
-      recognizer =
-          std::make_unique<rgbd::Yolo26Recognizer>(engine, yolo_config);
-#else
-      throw std::runtime_error("OpenVINO support is not built");
-#endif
-    }
+    rgbd::app::RecognizerOptions recognizer_options;
+    recognizer_options.model_path = options.model_path;
+    recognizer_options.labels_path = options.labels_path;
+    recognizer_options.device = options.device;
+    recognizer_options.input_size = options.input_size;
+    recognizer_options.confidence = options.confidence;
+    recognizer_options.iou = options.iou;
+    const std::unique_ptr<rgbd::IVisionRecognizer> recognizer =
+        rgbd::app::CreateRecognizer(recognizer_options);
     rgbd::RobustDepthFusionEstimator depth_estimator(rgbd::DepthFusionConfig{
         0.75F, 5, options.camera.depth_control.min_depth_m,
         options.camera.depth_control.max_depth_m, 3.0F});
-    rgbd::PerceptionPipeline pipeline(*recognizer, depth_estimator);
+    rgbd::ObjectGeometryConfig geometry_config;
+    geometry_config.pixel_stride =
+        static_cast<std::size_t>(options.cluster_stride);
+    geometry_config.voxel_size_m = options.cluster_voxel_m;
+    geometry_config.min_cluster_points =
+        static_cast<std::size_t>(options.min_cluster_points);
+    geometry_config.min_depth_m = options.camera.depth_control.min_depth_m;
+    geometry_config.max_depth_m = options.camera.depth_control.max_depth_m;
+    rgbd::DepthPointCloudGeometryEstimator geometry_estimator(geometry_config);
+    rgbd::PerceptionPipeline pipeline(*recognizer, depth_estimator,
+                                      &geometry_estimator);
     std::unique_ptr<rgbd::RecordingWriter> recorder;
     if (!options.recording_path.empty()) {
       recorder =

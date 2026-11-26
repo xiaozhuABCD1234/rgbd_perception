@@ -45,6 +45,35 @@ constexpr char kLayoutJson[] = R"({
         "rotation": 0,
         "annotations": {}
       }
+    },
+    "3D!objects": {
+      "cameraState": {
+        "distance": 1.0,
+        "perspective": true,
+        "phi": 60,
+        "target": [0.5, 0, 0],
+        "targetOffset": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "thetaOffset": 45,
+        "fovy": 45,
+        "near": 0.05,
+        "far": 20
+      },
+      "followMode": "follow-none",
+      "followTf": "camera",
+      "scene": {
+        "transforms": {
+          "enablePreloading": true,
+          "maxPreloadMessages": 1000
+        }
+      },
+      "transforms": {},
+      "topics": {
+        "/perception/objects": {
+          "visible": true
+        }
+      },
+      "layers": {}
     }
   },
   "globalVariables": {},
@@ -53,10 +82,15 @@ constexpr char kLayoutJson[] = R"({
     "speed": 1
   },
   "layout": {
-    "first": "Image!color",
-    "second": "Image!depth",
+    "first": "3D!objects",
+    "second": {
+      "first": "Image!color",
+      "second": "Image!depth",
+      "direction": "column",
+      "splitPercentage": 50
+    },
     "direction": "row",
-    "splitPercentage": 50
+    "splitPercentage": 55
   }
 })";
 

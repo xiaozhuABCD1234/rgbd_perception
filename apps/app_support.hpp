@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <memory>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -11,6 +12,13 @@
 
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/core/config.hpp"
+#include "rgbd/core/recognizer.hpp"
+#include "rgbd/recognition/center_box_recognizer.hpp"
+
+#ifdef RGBD_WITH_OPENVINO
+#include "rgbd/inference/openvino_engine.hpp"
+#include "rgbd/recognition/yolo26_recognizer.hpp"
+#endif
 
 namespace rgbd {
 namespace app {
@@ -90,6 +98,38 @@ inline std::vector<std::string> LoadLabels(const std::string& path) {
     }
   }
   return labels;
+}
+
+struct RecognizerOptions {
+  std::string model_path;
+  std::string labels_path;
+  std::string device = "CPU";
+  std::string fallback_label = "object";
+  int input_size = 640;
+  float confidence = 0.25F;
+  float iou = 0.45F;
+};
+
+inline std::unique_ptr<IVisionRecognizer> CreateRecognizer(
+    const RecognizerOptions& options) {
+  if (options.model_path.empty()) {
+    return std::make_unique<CenterBoxRecognizer>(
+        CenterBoxRecognizerConfig{options.fallback_label, 0.5F, 1.0F});
+  }
+#ifdef RGBD_WITH_OPENVINO
+  auto engine =
+      std::make_shared<OpenVinoEngine>(OpenVinoConfig{options.device});
+  engine->Load(options.model_path);
+  Yolo26Config config;
+  config.labels = LoadLabels(options.labels_path);
+  config.input_width = options.input_size;
+  config.input_height = options.input_size;
+  config.confidence_threshold = options.confidence;
+  config.iou_threshold = options.iou;
+  return std::make_unique<Yolo26Recognizer>(engine, config);
+#else
+  throw std::runtime_error("OpenVINO support is not built");
+#endif
 }
 
 struct CameraOptions {

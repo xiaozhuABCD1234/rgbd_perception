@@ -1,14 +1,19 @@
 #include <chrono>
 #include <csignal>
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "app_support.hpp"
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/core/config.hpp"
+#include "rgbd/core/depth_estimator.hpp"
 #include "rgbd/core/logging.hpp"
+#include "rgbd/core/object_geometry.hpp"
+#include "rgbd/core/perception_pipeline.hpp"
 #include "rgbd/io/lichtblick_server.hpp"
 #include "rgbd/io/local_web_server.hpp"
 #include "rgbd/io/mcap_image_writer.hpp"
@@ -24,6 +29,15 @@ struct Options {
   rgbd::CameraConfig camera;
   std::string camera_uri;
   std::string output;
+  std::string model_path;
+  std::string labels_path;
+  std::string device = "CPU";
+  int input_size = 640;
+  float confidence = 0.25F;
+  float iou = 0.45F;
+  int cluster_stride = 2;
+  float cluster_voxel_m = 0.025F;
+  int min_cluster_points = 20;
   int frames = 0;
   int port = 8765;
   int http_port = 8080;
@@ -59,6 +73,63 @@ Options ParseOptions(int argc, char** argv, Options options) {
         throw std::invalid_argument("--output requires a path");
       }
       options.output = argv[index];
+    } else if (argument == "--model") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--model requires a path");
+      }
+      options.model_path = argv[index];
+    } else if (argument == "--labels") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--labels requires a path");
+      }
+      options.labels_path = argv[index];
+    } else if (argument == "--device") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--device requires a value");
+      }
+      options.device = argv[index];
+    } else if (argument == "--imgsz") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--imgsz requires a value");
+      }
+      options.input_size = rgbd::app::ParsePositiveInt(argv[index], "--imgsz");
+    } else if (argument == "--confidence") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--confidence requires a value");
+      }
+      options.confidence = rgbd::app::ParseFloat(argv[index], "--confidence");
+      if (options.confidence < 0.0F || options.confidence > 1.0F) {
+        throw std::invalid_argument("--confidence must be in [0, 1]");
+      }
+    } else if (argument == "--iou") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--iou requires a value");
+      }
+      options.iou = rgbd::app::ParseFloat(argv[index], "--iou");
+      if (options.iou < 0.0F || options.iou > 1.0F) {
+        throw std::invalid_argument("--iou must be in [0, 1]");
+      }
+    } else if (argument == "--cluster-stride") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--cluster-stride requires a value");
+      }
+      options.cluster_stride =
+          rgbd::app::ParsePositiveInt(argv[index], "--cluster-stride");
+    } else if (argument == "--cluster-voxel") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--cluster-voxel requires a value");
+      }
+      options.cluster_voxel_m =
+          rgbd::app::ParseFloat(argv[index], "--cluster-voxel");
+      if (options.cluster_voxel_m <= 0.0F) {
+        throw std::invalid_argument("--cluster-voxel must be positive");
+      }
+    } else if (argument == "--min-cluster-points") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--min-cluster-points requires a value");
+      }
+      options.min_cluster_points =
+          rgbd::app::ParsePositiveInt(argv[index], "--min-cluster-points");
     } else if (argument == "--frames") {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");
@@ -101,6 +172,29 @@ int main(int argc, char** argv) {
     auto camera = options.camera_uri.empty()
                       ? rgbd::CreateCamera(options.camera)
                       : rgbd::CreateCameraFromUri(options.camera_uri);
+    rgbd::app::RecognizerOptions recognizer_options;
+    recognizer_options.model_path = options.model_path;
+    recognizer_options.labels_path = options.labels_path;
+    recognizer_options.device = options.device;
+    recognizer_options.input_size = options.input_size;
+    recognizer_options.confidence = options.confidence;
+    recognizer_options.iou = options.iou;
+    const std::unique_ptr<rgbd::IVisionRecognizer> recognizer =
+        rgbd::app::CreateRecognizer(recognizer_options);
+    rgbd::RobustDepthFusionEstimator depth_estimator(rgbd::DepthFusionConfig{
+        0.75F, 5, options.camera.depth_control.min_depth_m,
+        options.camera.depth_control.max_depth_m, 3.0F});
+    rgbd::ObjectGeometryConfig geometry_config;
+    geometry_config.pixel_stride =
+        static_cast<std::size_t>(options.cluster_stride);
+    geometry_config.voxel_size_m = options.cluster_voxel_m;
+    geometry_config.min_cluster_points =
+        static_cast<std::size_t>(options.min_cluster_points);
+    geometry_config.min_depth_m = options.camera.depth_control.min_depth_m;
+    geometry_config.max_depth_m = options.camera.depth_control.max_depth_m;
+    rgbd::DepthPointCloudGeometryEstimator geometry_estimator(geometry_config);
+    rgbd::PerceptionPipeline pipeline(*recognizer, depth_estimator,
+                                      &geometry_estimator);
     rgbd::LichtblickServerConfig server_config;
     server_config.port = options.port;
     server_config.min_depth_m = options.camera.depth_control.min_depth_m;
@@ -124,6 +218,10 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, HandleSignal);
 
     rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));
+    if (!options.model_path.empty()) {
+      rgbd::LogInfo("model=" + options.model_path +
+                    " device=" + options.device);
+    }
     rgbd::LogInfo("WebSocket: " + server.Url());
     if (writer != nullptr) {
       rgbd::LogInfo("recording: " + options.output);
@@ -149,7 +247,9 @@ int main(int argc, char** argv) {
         }
         throw std::runtime_error("failed to read camera frame");
       }
-      server.Publish(frame);
+      const std::vector<rgbd::ObjectObservation> observations =
+          pipeline.Process(frame);
+      server.Publish(frame, observations);
       if (writer != nullptr) {
         writer->Write(frame);
       }

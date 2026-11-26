@@ -2,13 +2,13 @@
 
 面向 Intel RealSense D435i、Orbbec Gemini 305、合成数据与录制数据的 ROS-free C++17 RGB-D 感知框架。
 
-项目提供统一相机接口，将厂商 SDK 隔离在可选后端库中，并输出目标在相机坐标系下的三维位置。
+项目提供统一相机接口，将厂商 SDK 隔离在可选后端库中，并输出目标在相机坐标系下的三维位置、深度点云聚类得到的几何中心和外接立方体。
 
 ## 分层结构
 
 ```text
 apps/                 命令行入口
-include/rgbd/core/    帧类型、接口、鲁棒深度融合、感知管线
+include/rgbd/core/    帧类型、接口、鲁棒深度融合、点云聚类与 OBB、感知管线
 src/core/             核心实现
 include/rgbd/inference/
 src/inference/        推理运行时抽象与 Tensor 容器
@@ -125,6 +125,8 @@ rgbd_replay build/session.rgbd
 
 `rgbd_viewer` 支持 `--record PATH`。指定 `--model` 时使用 OpenVINO + YOLO26，`--device` 可选 `CPU`、`GPU` 或 `AUTO`；不指定时使用内置中心框识别器。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
 
+识别结果会进入深度点云聚类：使用检测框或分割 mask 采样深度点，体素去重后做连通聚类，取最大簇计算几何中心和 PCA 外接立方体。可用 `--cluster-voxel`（体素/聚类距离，米）、`--min-cluster-points` 和 `--cluster-stride` 调整。`rgbd_viewer` 会打印 `center=(x, y, z) size=(x, y, z)`。
+
 ### Gemini 305 + Lichtblick
 
 `rgbd_lichtblick` 从 Gemini 305 采集 RGB-D 并实时发布到 Lichtblick WebSocket：
@@ -146,15 +148,31 @@ Lichtblick Web 静态资源从 `data/lichtblick-web` 读取，由程序内置的
 just lichtblick-setup
 ```
 
-图像话题：
+图像和物体话题：
 
 ```text
 /camera/color/image_raw
 /camera/depth/image_raw
 /camera/color/camera_info
+/perception/objects
 ```
 
-彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。按 `Ctrl+C` 停止。
+彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。`/perception/objects` 使用 `foxglove.SceneUpdate`，每个目标发布一个带位置、姿态和尺寸的 `CubePrimitive`，并附带类别、置信度和点数元数据。坐标从相机光学坐标系转换到 Foxglove 的 x 前、y 左、z 上显示坐标系。内置布局已包含 3D 面板。按 `Ctrl+C` 停止。
+
+带 YOLO26 和 OpenVINO 的实时命令：
+
+```bash
+./build/gemini305/rgbd_lichtblick \
+  --model models/yolo26n-seg.onnx --labels models/coco.txt --device GPU
+```
+
+聚类参数示例：
+
+```bash
+./build/gemini305/rgbd_lichtblick \
+  --model models/yolo26n-seg.onnx --device GPU \
+  --cluster-voxel 0.025 --min-cluster-points 30
+```
 
 端口来自 `config/rgbd.yaml`，也可以命令行覆盖；同时录制 MCAP：
 

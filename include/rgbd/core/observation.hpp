@@ -8,6 +8,7 @@
 
 #include "rgbd/core/frame.hpp"
 #include "rgbd/core/geometry.hpp"
+#include "rgbd/core/object_geometry.hpp"
 #include "rgbd/core/recognizer.hpp"
 
 namespace rgbd {
@@ -50,6 +51,7 @@ struct ObjectObservation {
   Nanoseconds timestamp{0};
   Detection2D detection;
   DepthEstimate depth;
+  std::optional<ObjectGeometry> geometry;
 };
 
 }

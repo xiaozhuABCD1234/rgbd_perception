@@ -28,6 +28,7 @@ namespace {
 constexpr std::uint64_t kColorChannel = 1;
 constexpr std::uint64_t kDepthChannel = 2;
 constexpr std::uint64_t kCalibrationChannel = 3;
+constexpr std::uint64_t kSceneChannel = 4;
 
 std::int64_t NowNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -127,6 +128,7 @@ class LichtblickServer::Impl {
     const std::string raw_schema = internal::FoxgloveRawImageDescriptor();
     const std::string calibration_schema =
         internal::FoxgloveCameraCalibrationDescriptor();
+    const std::string scene_schema = internal::FoxgloveSceneUpdateDescriptor();
     nlohmann::json server_info;
     server_info["op"] = "serverInfo";
     server_info["name"] = config.name;
@@ -143,7 +145,10 @@ class LichtblickServer::Impl {
                                            "foxglove.RawImage", raw_schema)),
          nlohmann::json::parse(
              ChannelJson(kCalibrationChannel, "/camera/color/camera_info",
-                         "foxglove.CameraCalibration", calibration_schema))});
+                         "foxglove.CameraCalibration", calibration_schema)),
+         nlohmann::json::parse(ChannelJson(kSceneChannel, "/perception/objects",
+                                           "foxglove.SceneUpdate",
+                                           scene_schema))});
     advertise_json = advertise.dump();
   }
 
@@ -190,7 +195,10 @@ class LichtblickServer::Impl {
     sessions.clear();
   }
 
-  void Publish(const FrameSet& frame) {
+  void Publish(const FrameSet& frame) { Publish(frame, {}); }
+
+  void Publish(const FrameSet& frame,
+               const std::vector<ObjectObservation>& observations) {
     if (!frame.Valid()) {
       throw std::invalid_argument("cannot publish an invalid frame");
     }
@@ -217,6 +225,8 @@ class LichtblickServer::Impl {
     const std::string calibration_payload =
         internal::SerializeFoxgloveCameraCalibration(frame, timestamp,
                                                      config.frame_id);
+    const std::string scene_payload = internal::SerializeFoxgloveSceneUpdate(
+        timestamp, config.frame_id, observations);
 
     bool queued = false;
     {
@@ -229,6 +239,7 @@ class LichtblickServer::Impl {
         QueueSubscriptions(state, kDepthChannel, timestamp, depth_payload);
         QueueSubscriptions(state, kCalibrationChannel, timestamp,
                            calibration_payload);
+        QueueSubscriptions(state, kSceneChannel, timestamp, scene_payload);
         queued = queued || !state->queue.empty();
       }
     }
@@ -419,6 +430,11 @@ void LichtblickServer::Start() { impl_->Start(); }
 void LichtblickServer::Stop() { impl_->Stop(); }
 
 void LichtblickServer::Publish(const FrameSet& frame) { impl_->Publish(frame); }
+
+void LichtblickServer::Publish(
+    const FrameSet& frame, const std::vector<ObjectObservation>& observations) {
+  impl_->Publish(frame, observations);
+}
 
 std::string LichtblickServer::Url() const { return impl_->Url(); }
 

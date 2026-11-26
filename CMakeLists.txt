@@ -66,6 +66,7 @@ add_library(rgbd_core
   src/core/config.cpp
   src/core/depth_estimator.cpp
   src/core/logging.cpp
+  src/core/object_geometry.cpp
   src/core/perception_pipeline.cpp)
 add_library(rgbd::core ALIAS rgbd_core)
 rgbd_configure_target(rgbd_core core)
@@ -150,6 +151,24 @@ if(RGBD_WITH_MCAP)
     endif()
     set(RGBD_PROTO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/proto")
     set(RGBD_PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/proto")
+    set(RGBD_SCENE_PROTO_NAMES
+      SceneUpdate
+      SceneEntity
+      SceneEntityDeletion
+      ArrowPrimitive
+      CubePrimitive
+      CylinderPrimitive
+      KeyValuePair
+      LinePrimitive
+      ModelPrimitive
+      SpherePrimitive
+      TextPrimitive
+      TriangleListPrimitive
+      Color
+      Pose
+      Vector3
+      Quaternion
+      Point3)
     set(RGBD_PROTO_FILES
       "${RGBD_PROTO_DIR}/foxglove/RawImage.proto"
       "${RGBD_PROTO_DIR}/foxglove/CameraCalibration.proto")
@@ -158,6 +177,13 @@ if(RGBD_WITH_MCAP)
       "${RGBD_PROTO_GEN_DIR}/foxglove/RawImage.pb.h"
       "${RGBD_PROTO_GEN_DIR}/foxglove/CameraCalibration.pb.cc"
       "${RGBD_PROTO_GEN_DIR}/foxglove/CameraCalibration.pb.h")
+    foreach(proto_name ${RGBD_SCENE_PROTO_NAMES})
+      list(APPEND RGBD_PROTO_FILES
+        "${RGBD_PROTO_DIR}/foxglove/${proto_name}.proto")
+      list(APPEND RGBD_PROTO_GENERATED
+        "${RGBD_PROTO_GEN_DIR}/foxglove/${proto_name}.pb.cc"
+        "${RGBD_PROTO_GEN_DIR}/foxglove/${proto_name}.pb.h")
+    endforeach()
     set(RGBD_PROTO_PATH_ARGS "--proto_path=${RGBD_PROTO_DIR}")
     foreach(include_dir ${Protobuf_INCLUDE_DIRS})
       list(APPEND RGBD_PROTO_PATH_ARGS "--proto_path=${include_dir}")
@@ -310,7 +336,12 @@ rgbd_enable_sanitizers(rgbd_replay)
 
 if(RGBD_MCAP_ENABLED)
   add_executable(rgbd_lichtblick apps/rgbd_lichtblick.cpp)
-  target_link_libraries(rgbd_lichtblick PRIVATE rgbd::cameras rgbd::mcap)
+  target_link_libraries(rgbd_lichtblick
+    PRIVATE rgbd::cameras rgbd::recognition rgbd::mcap)
+  if(RGBD_OPENVINO_ENABLED)
+    target_link_libraries(rgbd_lichtblick PRIVATE rgbd::openvino)
+    target_compile_definitions(rgbd_lichtblick PRIVATE RGBD_WITH_OPENVINO=1)
+  endif()
   rgbd_set_project_warnings(rgbd_lichtblick)
   rgbd_enable_sanitizers(rgbd_lichtblick)
 endif()
@@ -322,6 +353,7 @@ if(BUILD_TESTING)
     tests/test_config.cpp
     tests/test_depth_estimator.cpp
     tests/test_geometry.cpp
+    tests/test_object_geometry.cpp
     tests/test_pipeline.cpp
     tests/test_recording.cpp
     tests/test_synthetic_camera.cpp
@@ -336,7 +368,12 @@ if(BUILD_TESTING)
   rgbd_set_project_warnings(rgbd_tests)
   rgbd_enable_sanitizers(rgbd_tests)
   if(RGBD_MCAP_ENABLED)
-    target_sources(rgbd_tests PRIVATE tests/test_mcap_writer.cpp)
+    target_sources(rgbd_tests PRIVATE
+      tests/test_mcap_writer.cpp
+      tests/test_scene_update.cpp)
+    target_include_directories(rgbd_tests PRIVATE
+      "${CMAKE_CURRENT_SOURCE_DIR}/src/io"
+      "${RGBD_PROTO_GEN_DIR}")
     target_link_libraries(rgbd_tests PRIVATE rgbd::mcap)
   endif()
   add_test(NAME rgbd_unit_tests COMMAND rgbd_tests)

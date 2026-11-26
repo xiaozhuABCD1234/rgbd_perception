@@ -3,8 +3,10 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "rgbd/core/frame.hpp"
+#include "rgbd/core/observation.hpp"
 
 namespace rgbd {
 
@@ -27,6 +29,8 @@ class LichtblickServer {
   void Start();
   void Stop();
   void Publish(const FrameSet& frame);
+  void Publish(const FrameSet& frame,
+               const std::vector<ObjectObservation>& observations);
 
   [[nodiscard]] std::string Url() const;
   [[nodiscard]] int Port() const noexcept;

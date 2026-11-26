@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "rgbd/core/object_geometry.hpp"
 #include "rgbd/core/perception_pipeline.hpp"
 #include "rgbd/recognition/center_box_recognizer.hpp"
 #include "test_support.hpp"
@@ -46,6 +47,25 @@ RGBD_TEST(pipeline_preserves_frame_identity) {
   RGBD_CHECK(observations.front().sequence == frame.sequence);
   RGBD_CHECK(observations.front().timestamp == frame.device_timestamp);
   RGBD_CHECK(observations.front().depth.quality == rgbd::DepthQuality::kValid);
+}
+
+RGBD_TEST(pipeline_populates_object_geometry) {
+  const rgbd::FrameSet frame = MakeFrame();
+  StaticRecognizer recognizer;
+  const rgbd::RobustDepthFusionEstimator estimator;
+  rgbd::ObjectGeometryConfig config;
+  config.pixel_stride = 1;
+  config.min_cluster_points = 5;
+  config.min_depth_m = 0.04F;
+  config.max_depth_m = 10.0F;
+  const rgbd::DepthPointCloudGeometryEstimator geometry_estimator(config);
+  const rgbd::PerceptionPipeline pipeline(recognizer, estimator,
+                                          &geometry_estimator);
+  const std::vector<rgbd::ObjectObservation> observations =
+      pipeline.Process(frame);
+  RGBD_CHECK(observations.size() == 1);
+  RGBD_CHECK(observations.front().geometry.has_value());
+  RGBD_CHECK_NEAR(observations.front().geometry->box.center.z, 1.5F, 1e-3F);
 }
 
 RGBD_TEST(pipeline_returns_empty_without_detections) {
