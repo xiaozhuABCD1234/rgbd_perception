@@ -98,13 +98,19 @@ rgbd_replay build/demo.rgbd
 just gemini305-lichtblick
 ```
 
-默认地址：
+默认 WebSocket 地址：
 
 ```text
 ws://localhost:8765
 ```
 
-在 Lichtblick 中选择打开连接，数据源选择 Foxglove WebSocket，填入该地址。图像话题：
+浏览器直接打开：
+
+```text
+https://lichtblick-suite.github.io/lichtblick/?ds=foxglove-websocket&ds.url=ws%3A%2F%2Flocalhost%3A8765
+```
+
+程序启动时也会打印这个浏览器地址。图像话题：
 
 ```text
 /camera/color/image_raw

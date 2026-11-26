@@ -27,6 +27,7 @@ class LichtblickServer {
   void Publish(const FrameSet& frame);
 
   [[nodiscard]] std::string Url() const;
+  [[nodiscard]] std::string BrowserUrl() const;
   [[nodiscard]] int Port() const noexcept;
 
  private:

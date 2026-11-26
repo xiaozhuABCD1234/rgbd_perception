@@ -91,7 +91,8 @@ int main(int argc, char** argv) {
     std::signal(SIGTERM, HandleSignal);
 
     std::cout << "rgbd_perception " << rgbd::kVersion << '\n';
-    std::cout << "Lichtblick: " << server.Url() << '\n';
+    std::cout << "WebSocket: " << server.Url() << '\n';
+    std::cout << "Browser: " << server.BrowserUrl() << '\n';
     if (writer != nullptr) {
       std::cout << "recording: " << options.output << '\n';
     }
