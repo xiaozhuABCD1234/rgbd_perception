@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Reject whitespace errors in staged changes. Formatting is checked by `just check` and CI.
 git diff --cached --check

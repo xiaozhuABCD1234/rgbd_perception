@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Validate one Git commit message using Conventional Commits 1.0."""
 
 import argparse
 import re
@@ -38,10 +37,10 @@ def validate(message: str) -> list[str]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser()
     source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("file", nargs="?", type=Path, help="commit message file")
-    source.add_argument("--message", help="literal message for local validation")
+    source.add_argument("file", nargs="?", type=Path)
+    source.add_argument("--message")
     args = parser.parse_args()
 
     message = args.message if args.message is not None else args.file.read_text(encoding="utf-8")

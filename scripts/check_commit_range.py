@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Validate every non-merge commit in a Git revision range."""
 
 import argparse
 import subprocess
@@ -15,8 +14,8 @@ def git(*args: str) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("range", nargs="?", default="HEAD", help="Git revision or range")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("range", nargs="?", default="HEAD")
     args = parser.parse_args()
 
     commits = git("log", "--format=%H", "--no-merges", args.range).splitlines()
