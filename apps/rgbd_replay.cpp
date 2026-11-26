@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
     rgbd::CenterBoxRecognizer recognizer(
         rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
     rgbd::RobustDepthFusionEstimator depth_estimator(
-        rgbd::DepthFusionConfig{0.75F, 5, 0.04F, 1.0F, 3.0F});
+        rgbd::DepthFusionConfig{0.75F, 5, 0.04F, 10.0F, 3.0F});
     rgbd::PerceptionPipeline pipeline(recognizer, depth_estimator);
 
     rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));

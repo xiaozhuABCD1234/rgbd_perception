@@ -36,11 +36,11 @@ constexpr char kLayoutJson[] = R"({
       }
     },
     "Image!depth": {
-      "colorMode": "colormap",
-      "colorMap": "turbo",
       "imageMode": {
         "imageTopic": "/camera/depth/image_raw",
         "calibrationTopic": "/camera/color/camera_info",
+        "colorMode": "colormap",
+        "colorMap": "turbo",
         "synchronize": false,
         "rotation": 0,
         "annotations": {}
