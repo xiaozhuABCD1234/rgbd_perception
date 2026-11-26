@@ -85,7 +85,8 @@ class McapImageWriter::Impl {
     for (std::size_t index = 0; index < frame.depth.values.size(); ++index) {
       const float meters = frame.depth.values[index];
       std::uint16_t value = 0;
-      if (std::isfinite(meters) && meters > 0.0F) {
+      if (std::isfinite(meters) && meters >= config.min_depth_m &&
+          meters <= config.max_depth_m) {
         const float scaled = meters * 1000.0F;
         value = scaled >= static_cast<float>(
                               std::numeric_limits<std::uint16_t>::max())

@@ -103,6 +103,8 @@ int main(int argc, char** argv) {
                       : rgbd::CreateCameraFromUri(options.camera_uri);
     rgbd::LichtblickServerConfig server_config;
     server_config.port = options.port;
+    server_config.min_depth_m = options.camera.depth_control.min_depth_m;
+    server_config.max_depth_m = options.camera.depth_control.max_depth_m;
     rgbd::LichtblickServer server(server_config);
     rgbd::LocalWebServerConfig web_config;
     web_config.web_root = options.web_root;
@@ -113,6 +115,8 @@ int main(int argc, char** argv) {
     if (!options.output.empty()) {
       rgbd::McapImageWriterConfig writer_config;
       writer_config.path = options.output;
+      writer_config.min_depth_m = options.camera.depth_control.min_depth_m;
+      writer_config.max_depth_m = options.camera.depth_control.max_depth_m;
       writer = std::make_unique<rgbd::McapImageWriter>(writer_config);
     }
 

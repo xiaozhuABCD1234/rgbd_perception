@@ -203,7 +203,7 @@ class LichtblickServer::Impl {
     for (std::size_t index = 0; index < frame.depth.values.size(); ++index) {
       const float meters = frame.depth.values[index];
       std::uint16_t value = 0;
-      if (meters > 0.0F) {
+      if (meters >= config.min_depth_m && meters <= config.max_depth_m) {
         const float scaled = meters * 1000.0F;
         value = scaled >= 65535.0F ? 65535U
                                    : static_cast<std::uint16_t>(scaled + 0.5F);

@@ -111,7 +111,7 @@ camera:
   timeout_ms: 1000
 ```
 
-YAML 只保存深度相机参数，由 `rgbd_viewer` 和 `rgbd_lichtblick` 共用。Gemini 305 默认使用手册中的 848 x 530 @ 30fps、深度 Y16、彩色 RGB8、D2C 对齐、自动曝光、增益 16 和视差搜索范围 128；`min_depth_m` / `max_depth_m` 控制深度过滤范围，`disparity_search_range` 控制硬件近端测距能力（848 x 530 下 64 / 128 / 256 约对应 125 / 65 / 35mm 最近距离）。算法其余参数写死在 `apps/` 中，异步日志使用 `stderr`。`rgbd_viewer <uri>` 和 `rgbd_lichtblick --camera <uri>` 可以临时覆盖结构化配置。
+YAML 只保存深度相机参数，由 `rgbd_viewer` 和 `rgbd_lichtblick` 共用。Gemini 305 默认使用手册中的 848 x 530 @ 30fps、深度 Y16、彩色 RGB8、D2C 对齐、自动曝光、增益 16 和视差搜索范围 128；`min_depth_m` / `max_depth_m` 控制深度过滤范围，超出范围的深度会在 Lichtblick 推流和 MCAP 录制时置 0，`disparity_search_range` 控制硬件近端测距能力（848 x 530 下 64 / 128 / 256 约对应 125 / 65 / 35mm 最近距离）。Lichtblick 深度面板默认使用 Turbo Color map。算法其余参数写死在 `apps/` 中，异步日志使用 `stderr`。`rgbd_viewer <uri>` 和 `rgbd_lichtblick --camera <uri>` 可以临时覆盖结构化配置。
 
 ## 应用
 

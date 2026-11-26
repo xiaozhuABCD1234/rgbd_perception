@@ -15,6 +15,8 @@ struct McapImageWriterConfig {
   std::string depth_topic = "/camera/depth/image_raw";
   std::string calibration_topic = "/camera/color/camera_info";
   std::string frame_id = "camera";
+  float min_depth_m = 0.04F;
+  float max_depth_m = 1.0F;
 };
 
 class McapImageWriter {

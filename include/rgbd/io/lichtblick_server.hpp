@@ -12,6 +12,8 @@ struct LichtblickServerConfig {
   int port = 8765;
   std::string name = "rgbd_perception";
   std::string frame_id = "camera";
+  float min_depth_m = 0.04F;
+  float max_depth_m = 1.0F;
 };
 
 class LichtblickServer {
