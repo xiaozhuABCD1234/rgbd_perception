@@ -1,47 +1,44 @@
-#pragma once
+#ifndef RGBD_CORE_OBSERVATION_HPP_
+#define RGBD_CORE_OBSERVATION_HPP_
 
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 
-#include "rgbd/detector.hpp"
-#include "rgbd/frame.hpp"
+#include "rgbd/core/frame.hpp"
+#include "rgbd/core/geometry.hpp"
+#include "rgbd/core/recognizer.hpp"
 
 namespace rgbd {
 
 enum class DepthQuality {
-  valid,
-  invalid_frame,
-  invalid_roi,
-  invalid_intrinsics,
-  too_few_valid_pixels,
+  kValid,
+  kInvalidFrame,
+  kInvalidRoi,
+  kInvalidIntrinsics,
+  kTooFewValidPixels,
 };
 
-inline constexpr const char* to_string(DepthQuality quality) noexcept {
+inline const char* ToString(DepthQuality quality) noexcept {
   switch (quality) {
-    case DepthQuality::valid:
+    case DepthQuality::kValid:
       return "valid";
-    case DepthQuality::invalid_frame:
+    case DepthQuality::kInvalidFrame:
       return "invalid_frame";
-    case DepthQuality::invalid_roi:
+    case DepthQuality::kInvalidRoi:
       return "invalid_roi";
-    case DepthQuality::invalid_intrinsics:
+    case DepthQuality::kInvalidIntrinsics:
       return "invalid_intrinsics";
-    case DepthQuality::too_few_valid_pixels:
+    case DepthQuality::kTooFewValidPixels:
       return "too_few_valid_pixels";
   }
   return "unknown";
 }
 
-struct Point3f {
-  float x = 0.0F;
-  float y = 0.0F;
-  float z = 0.0F;
-};
-
 struct DepthEstimate {
-  DepthQuality quality = DepthQuality::invalid_frame;
+  DepthQuality quality = DepthQuality::kInvalidFrame;
+  Rect roi;
   std::size_t valid_pixel_count = 0;
   std::optional<float> distance_m;
   std::optional<Point3f> position_camera_m;
@@ -55,4 +52,6 @@ struct ObjectObservation {
   DepthEstimate depth;
 };
 
-}  // namespace rgbd
+}
+
+#endif

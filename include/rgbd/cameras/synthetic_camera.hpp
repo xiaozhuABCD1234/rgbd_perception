@@ -1,11 +1,12 @@
-#pragma once
+#ifndef RGBD_CAMERAS_SYNTHETIC_CAMERA_HPP_
+#define RGBD_CAMERAS_SYNTHETIC_CAMERA_HPP_
 
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
-#include "rgbd/camera.hpp"
+#include "rgbd/core/camera.hpp"
 
 namespace rgbd {
 
@@ -22,13 +23,13 @@ class SyntheticCamera final : public IDepthCamera {
   explicit SyntheticCamera(SyntheticCameraConfig config = {});
   ~SyntheticCamera() override;
 
-  void open() override;
-  void start() override;
-  void stop() override;
-  void close() override;
-  bool read(FrameSet& frame, std::chrono::milliseconds timeout) override;
+  void Open() override;
+  void Start() override;
+  void Stop() override;
+  void Close() override;
+  bool Read(FrameSet& frame, std::chrono::milliseconds timeout) override;
 
-  [[nodiscard]] std::string name() const override;
+  [[nodiscard]] std::string Name() const override;
 
  private:
   SyntheticCameraConfig config_;
@@ -37,4 +38,6 @@ class SyntheticCamera final : public IDepthCamera {
   std::uint64_t next_sequence_ = 0;
 };
 
-}  // namespace rgbd
+}
+
+#endif

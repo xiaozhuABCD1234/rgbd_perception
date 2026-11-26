@@ -1,7 +1,8 @@
-#include "rgbd/synthetic_camera.hpp"
+#include "rgbd/cameras/synthetic_camera.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -20,9 +21,9 @@ SyntheticCamera::SyntheticCamera(SyntheticCameraConfig config)
   }
 }
 
-SyntheticCamera::~SyntheticCamera() { close(); }
+SyntheticCamera::~SyntheticCamera() { Close(); }
 
-void SyntheticCamera::open() {
+void SyntheticCamera::Open() {
   if (opened_) {
     return;
   }
@@ -30,21 +31,21 @@ void SyntheticCamera::open() {
   next_sequence_ = 0;
 }
 
-void SyntheticCamera::start() {
+void SyntheticCamera::Start() {
   if (!opened_) {
     throw std::logic_error("camera must be opened before start");
   }
   streaming_ = true;
 }
 
-void SyntheticCamera::stop() { streaming_ = false; }
+void SyntheticCamera::Stop() { streaming_ = false; }
 
-void SyntheticCamera::close() {
-  stop();
+void SyntheticCamera::Close() {
+  Stop();
   opened_ = false;
 }
 
-bool SyntheticCamera::read(FrameSet& frame, std::chrono::milliseconds timeout) {
+bool SyntheticCamera::Read(FrameSet& frame, std::chrono::milliseconds timeout) {
   if (!streaming_) {
     return false;
   }
@@ -92,6 +93,6 @@ bool SyntheticCamera::read(FrameSet& frame, std::chrono::milliseconds timeout) {
   return true;
 }
 
-std::string SyntheticCamera::name() const { return config_.camera_id; }
+std::string SyntheticCamera::Name() const { return config_.camera_id; }
 
-}  // namespace rgbd
+}
