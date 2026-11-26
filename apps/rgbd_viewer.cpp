@@ -44,6 +44,9 @@ Options ParseOptions(int argc, char** argv) {
   options.camera_uri = argv[1];
   for (int index = 2; index < argc; ++index) {
     const std::string argument(argv[index]);
+    if (argument == "--") {
+      continue;
+    }
     if (argument == "--frames") {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");

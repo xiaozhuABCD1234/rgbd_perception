@@ -143,35 +143,50 @@ class OrbbecCamera final : public IDepthCamera {
     if (!streaming_ || pipeline_ == nullptr || timeout.count() <= 0) {
       return false;
     }
-    std::shared_ptr<ob::FrameSet> frames;
-    try {
-      const auto raw = pipeline_->waitForFrameset(
-          static_cast<std::uint32_t>(timeout.count()));
-      if (raw == nullptr) {
-        return false;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+      const auto remaining =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              deadline - std::chrono::steady_clock::now());
+      if (remaining.count() <= 0) {
+        break;
       }
-      const auto processed = align_->process(raw);
-      if (processed == nullptr) {
-        return false;
+      std::shared_ptr<ob::FrameSet> frames;
+      try {
+        const auto raw = pipeline_->waitForFrameset(
+            static_cast<std::uint32_t>(remaining.count()));
+        if (raw == nullptr) {
+          continue;
+        }
+        const auto raw_color = raw->getColorFrame();
+        const auto raw_depth = raw->getDepthFrame();
+        if (raw_color == nullptr || raw_depth == nullptr) {
+          continue;
+        }
+        const auto processed = align_->process(raw);
+        if (processed == nullptr) {
+          continue;
+        }
+        frames = processed->as<ob::FrameSet>();
+      } catch (const ob::Error&) {
+        continue;
       }
-      frames = processed->as<ob::FrameSet>();
-    } catch (const ob::Error&) {
-      return false;
+      if (frames == nullptr) {
+        continue;
+      }
+      const auto color = frames->getColorFrame();
+      const auto depth = frames->getDepthFrame();
+      if (color == nullptr || depth == nullptr) {
+        continue;
+      }
+      if (color->getFormat() != OB_FORMAT_RGB ||
+          depth->getFormat() != OB_FORMAT_Y16) {
+        throw std::runtime_error("orbbec: unexpected frame format");
+      }
+      Fill(*color, *depth, frame);
+      return true;
     }
-    if (frames == nullptr) {
-      return false;
-    }
-    const auto color = frames->getColorFrame();
-    const auto depth = frames->getDepthFrame();
-    if (color == nullptr || depth == nullptr) {
-      return false;
-    }
-    if (color->getFormat() != OB_FORMAT_RGB ||
-        depth->getFormat() != OB_FORMAT_Y16) {
-      throw std::runtime_error("orbbec: unexpected frame format");
-    }
-    Fill(*color, *depth, frame);
-    return true;
+    return false;
   }
 
   [[nodiscard]] std::string Name() const override {

@@ -38,6 +38,9 @@ Options ParseOptions(int argc, char** argv) {
   Options options;
   for (int index = 1; index < argc; ++index) {
     const std::string argument(argv[index]);
+    if (argument == "--") {
+      continue;
+    }
     if (argument == "--camera") {
       if (++index >= argc) {
         throw std::invalid_argument("--camera requires a value");
