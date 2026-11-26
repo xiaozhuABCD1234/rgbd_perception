@@ -5,7 +5,10 @@
 #include <stdexcept>
 #include <string>
 
+#include "app_support.hpp"
+#include "rgbd/core/config.hpp"
 #include "rgbd/core/depth_estimator.hpp"
+#include "rgbd/core/logging.hpp"
 #include "rgbd/core/perception_pipeline.hpp"
 #include "rgbd/io/replay_camera.hpp"
 #include "rgbd/recognition/center_box_recognizer.hpp"
@@ -13,95 +16,117 @@
 
 namespace {
 
-constexpr int kTimeoutMs = 1000;
-
 struct Options {
   std::string path;
   int frames = 0;
   bool loop = false;
+  int timeout_ms = 1000;
 };
 
-int ParsePositiveInt(const std::string& value, const char* name) {
-  std::size_t parsed = 0;
-  const int result = std::stoi(value, &parsed);
-  if (parsed != value.size() || result <= 0) {
-    throw std::invalid_argument(std::string(name) + " must be positive");
+Options LoadOptions(const rgbd::Config& config) {
+  Options options;
+  options.path = config.GetString("replay.path");
+  options.loop = config.GetBool("replay.loop", options.loop);
+  options.timeout_ms = config.GetInt("replay.timeout_ms", options.timeout_ms);
+  if (options.timeout_ms <= 0) {
+    throw std::invalid_argument("replay.timeout_ms must be positive");
   }
-  return result;
+  return options;
 }
 
-Options ParseOptions(int argc, char** argv) {
-  if (argc < 2) {
-    throw std::invalid_argument(
-        "usage: rgbd_replay <recording> [--frames N] [--loop]");
-  }
-  Options options;
-  options.path = argv[1];
-  for (int index = 2; index < argc; ++index) {
+Options ParseOptions(int argc, char** argv, Options options) {
+  bool path_set = false;
+  for (int index = 1; index < argc; ++index) {
     const std::string argument(argv[index]);
     if (argument == "--") {
+      continue;
+    }
+    if (argument == "--config") {
+      ++index;
       continue;
     }
     if (argument == "--frames") {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");
       }
-      options.frames = ParsePositiveInt(argv[index], "--frames");
+      options.frames = rgbd::app::ParsePositiveInt(argv[index], "--frames");
     } else if (argument == "--loop") {
       options.loop = true;
-    } else {
+    } else if (argument.rfind("--", 0) == 0) {
       throw std::invalid_argument("unknown argument: " + argument);
+    } else {
+      if (path_set) {
+        throw std::invalid_argument("recording path specified more than once");
+      }
+      options.path = argument;
+      path_set = true;
     }
+  }
+  if (options.path.empty()) {
+    throw std::invalid_argument("recording path is required");
   }
   return options;
 }
 
+void PrintObservation(const rgbd::ObjectObservation& observation) {
+  std::cout << "frame=" << observation.sequence
+            << " label=" << observation.detection.label
+            << " quality=" << rgbd::ToString(observation.depth.quality);
+  if (observation.depth.distance_m) {
+    std::cout << std::fixed << std::setprecision(3)
+              << " depth_m=" << *observation.depth.distance_m;
+  }
+  if (observation.depth.position_camera_m) {
+    const rgbd::Point3f& position = *observation.depth.position_camera_m;
+    std::cout << std::fixed << std::setprecision(4) << " xyz=(" << position.x
+              << ", " << position.y << ", " << position.z << ")";
+  }
+  std::cout << '\n';
 }
+
+}  // namespace
 
 int main(int argc, char** argv) {
   try {
-    const Options options = ParseOptions(argc, argv);
+    const rgbd::app::ConfigArgument config_argument =
+        rgbd::app::ParseConfigArgument(argc, argv);
+    rgbd::Config config;
+    rgbd::app::LoadConfig(config, config_argument);
+    rgbd::InitializeLogging(rgbd::LoadLoggingConfig(config));
+    const Options options = ParseOptions(argc, argv, LoadOptions(config));
+    const rgbd::app::AlgorithmOptions algorithm =
+        rgbd::app::LoadAlgorithmOptions(config);
+
     rgbd::ReplayCameraConfig camera_config;
     camera_config.path = options.path;
     camera_config.loop = options.loop;
     rgbd::ReplayCamera camera(camera_config);
-    rgbd::CenterBoxRecognizer recognizer;
-    rgbd::RobustDepthFusionEstimator depth_estimator;
+    rgbd::CenterBoxRecognizer recognizer(algorithm.recognizer);
+    rgbd::RobustDepthFusionEstimator depth_estimator(algorithm.depth);
     rgbd::PerceptionPipeline pipeline(recognizer, depth_estimator);
 
-    std::cout << "rgbd_perception " << rgbd::kVersion << '\n';
+    rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));
     camera.Open();
     camera.Start();
     int received = 0;
     while (options.frames == 0 || received < options.frames) {
       rgbd::FrameSet frame;
-      if (!camera.Read(frame, std::chrono::milliseconds(kTimeoutMs))) {
+      if (!camera.Read(frame, std::chrono::milliseconds(options.timeout_ms))) {
         break;
       }
       ++received;
       for (const auto& observation : pipeline.Process(frame)) {
-        std::cout << "frame=" << observation.sequence
-                  << " label=" << observation.detection.label
-                  << " quality=" << rgbd::ToString(observation.depth.quality);
-        if (observation.depth.distance_m) {
-          std::cout << std::fixed << std::setprecision(3)
-                    << " depth_m=" << *observation.depth.distance_m;
-        }
-        if (observation.depth.position_camera_m) {
-          const rgbd::Point3f& position = *observation.depth.position_camera_m;
-          std::cout << std::fixed << std::setprecision(4) << " xyz=("
-                    << position.x << ", " << position.y << ", " << position.z
-                    << ")";
-        }
-        std::cout << '\n';
+        PrintObservation(observation);
       }
     }
     camera.Stop();
     camera.Close();
-    std::cout << "replayed=" << received << '\n';
+    rgbd::LogInfo("replayed " + std::to_string(received) + " frames");
+    rgbd::ShutdownLogging();
     return received > 0 ? 0 : 1;
   } catch (const std::exception& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    rgbd::LogError(error.what());
+    rgbd::ShutdownLogging();
     return 1;
   }
 }

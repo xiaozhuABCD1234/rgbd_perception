@@ -130,13 +130,6 @@ std::chrono::milliseconds FramePeriod(int fps) {
   return std::chrono::milliseconds(1000 / fps);
 }
 
-std::string SourceOrThrow(const CameraUri& uri) {
-  if (uri.source.empty()) {
-    throw std::invalid_argument("camera source must not be empty");
-  }
-  return uri.source;
-}
-
 }
 
 std::optional<CameraUri> ParseCameraUri(std::string_view uri) {
@@ -197,56 +190,101 @@ std::optional<CameraUri> ParseCameraUri(std::string_view uri) {
   return parsed;
 }
 
+CameraConfig ConfigFromUri(const CameraUri& uri) {
+  CameraConfig config;
+  config.backend = uri.scheme;
+  config.id = StringOption(uri, "id", uri.scheme);
+  config.serial = StringOption(uri, "serial", "");
+  const int width =
+      IntOption(uri, "width", static_cast<int>(config.depth.width));
+  const int height =
+      IntOption(uri, "height", static_cast<int>(config.depth.height));
+  const int fps = IntOption(uri, "fps", config.depth.fps);
+  config.depth.width = static_cast<std::size_t>(width);
+  config.depth.height = static_cast<std::size_t>(height);
+  config.depth.fps = fps;
+  config.color.width = static_cast<std::size_t>(width);
+  config.color.height = static_cast<std::size_t>(height);
+  config.color.fps = fps;
+  config.depth.format = config.backend == "d435i" ? "z16" : "y16";
+  config.color.format = "rgb8";
+  config.align_depth_to_color =
+      BoolOption(uri, "align_depth_to_color", config.align_depth_to_color);
+  config.source = uri.source;
+  config.loop = BoolOption(uri, "loop", config.loop);
+  config.depth_m = FloatOption(uri, "depth_m", config.depth_m);
+  return config;
+}
+
 std::unique_ptr<IDepthCamera> CreateCamera(const CameraUri& uri) {
-  if (uri.scheme == "synthetic") {
-    SyntheticCameraConfig config;
-    config.camera_id = StringOption(uri, "id", config.camera_id);
-    config.width = static_cast<std::size_t>(
-        IntOption(uri, "width", static_cast<int>(config.width)));
-    config.height = static_cast<std::size_t>(
-        IntOption(uri, "height", static_cast<int>(config.height)));
-    config.depth_m = FloatOption(uri, "depth_m", config.depth_m);
-    config.frame_period = FramePeriod(IntOption(uri, "fps", 30));
-    return std::make_unique<SyntheticCamera>(std::move(config));
+  return CreateCamera(ConfigFromUri(uri));
+}
+
+std::unique_ptr<IDepthCamera> CreateCamera(const CameraConfig& config) {
+  const std::string backend = Lowercase(config.backend);
+  if (backend == "synthetic") {
+    SyntheticCameraConfig synthetic;
+    synthetic.camera_id = config.id;
+    synthetic.width = config.color.width;
+    synthetic.height = config.color.height;
+    synthetic.depth_m = config.depth_m;
+    synthetic.frame_period = FramePeriod(config.color.fps);
+    return std::make_unique<SyntheticCamera>(std::move(synthetic));
   }
-  if (uri.scheme == "replay") {
-    ReplayCameraConfig config;
-    config.path = SourceOrThrow(uri);
-    config.loop = BoolOption(uri, "loop", false);
-    config.camera_id = StringOption(uri, "id", config.camera_id);
-    return std::make_unique<ReplayCamera>(std::move(config));
+  if (backend == "replay") {
+    if (config.source.empty()) {
+      throw std::invalid_argument("replay source must not be empty");
+    }
+    ReplayCameraConfig replay;
+    replay.path = config.source;
+    replay.loop = config.loop;
+    replay.camera_id = config.id;
+    return std::make_unique<ReplayCamera>(std::move(replay));
   }
-  if (uri.scheme == "gemini305") {
+  if (backend == "gemini305") {
+    if (Lowercase(config.depth.format) != "y16" ||
+        Lowercase(config.color.format) != "rgb8") {
+      throw std::invalid_argument(
+          "gemini305 supports depth y16 and color rgb8");
+    }
 #ifdef RGBD_WITH_ORBBEC
-    OrbbecCameraConfig config;
-    config.camera_id = StringOption(uri, "id", config.camera_id);
-    config.serial = StringOption(uri, "serial", config.serial);
-    config.width = static_cast<std::size_t>(
-        IntOption(uri, "width", static_cast<int>(config.width)));
-    config.height = static_cast<std::size_t>(
-        IntOption(uri, "height", static_cast<int>(config.height)));
-    config.fps = IntOption(uri, "fps", config.fps);
-    return CreateOrbbecCamera(std::move(config));
+    OrbbecCameraConfig orbbec;
+    orbbec.camera_id = config.id;
+    orbbec.serial = config.serial;
+    orbbec.depth_width = config.depth.width;
+    orbbec.depth_height = config.depth.height;
+    orbbec.depth_fps = config.depth.fps;
+    orbbec.color_width = config.color.width;
+    orbbec.color_height = config.color.height;
+    orbbec.color_fps = config.color.fps;
+    orbbec.align_depth_to_color = config.align_depth_to_color;
+    return CreateOrbbecCamera(std::move(orbbec));
 #else
     throw std::runtime_error("gemini305 backend is not built");
 #endif
   }
-  if (uri.scheme == "d435i") {
+  if (backend == "d435i") {
+    if (Lowercase(config.depth.format) != "z16" ||
+        Lowercase(config.color.format) != "rgb8") {
+      throw std::invalid_argument("d435i supports depth z16 and color rgb8");
+    }
 #ifdef RGBD_WITH_REALSENSE
-    RealSenseCameraConfig config;
-    config.camera_id = StringOption(uri, "id", config.camera_id);
-    config.serial = StringOption(uri, "serial", config.serial);
-    config.width = static_cast<std::size_t>(
-        IntOption(uri, "width", static_cast<int>(config.width)));
-    config.height = static_cast<std::size_t>(
-        IntOption(uri, "height", static_cast<int>(config.height)));
-    config.fps = IntOption(uri, "fps", config.fps);
-    return CreateRealSenseCamera(std::move(config));
+    RealSenseCameraConfig realsense;
+    realsense.camera_id = config.id;
+    realsense.serial = config.serial;
+    realsense.depth_width = config.depth.width;
+    realsense.depth_height = config.depth.height;
+    realsense.depth_fps = config.depth.fps;
+    realsense.color_width = config.color.width;
+    realsense.color_height = config.color.height;
+    realsense.color_fps = config.color.fps;
+    realsense.align_depth_to_color = config.align_depth_to_color;
+    return CreateRealSenseCamera(std::move(realsense));
 #else
     throw std::runtime_error("d435i backend is not built");
 #endif
   }
-  throw std::invalid_argument("unknown camera scheme: " + uri.scheme);
+  throw std::invalid_argument("unknown camera backend: " + config.backend);
 }
 
 std::unique_ptr<IDepthCamera> CreateCameraFromUri(std::string_view uri) {
@@ -267,5 +305,4 @@ std::vector<std::string> AvailableCameraSchemes() {
 #endif
   return schemes;
 }
-
 }

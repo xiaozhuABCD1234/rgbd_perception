@@ -80,10 +80,12 @@ class OrbbecCamera final : public IDepthCamera {
  public:
   explicit OrbbecCamera(OrbbecCameraConfig config)
       : config_(std::move(config)) {
-    if (config_.camera_id.empty() || config_.width == 0 ||
-        config_.height == 0 || config_.fps <= 0) {
+    if (config_.camera_id.empty() || config_.depth_width == 0 ||
+        config_.depth_height == 0 || config_.depth_fps <= 0 ||
+        config_.color_width == 0 || config_.color_height == 0 ||
+        config_.color_fps <= 0) {
       throw std::invalid_argument(
-          "orbbec camera requires an ID and a valid stream profile");
+          "orbbec camera requires an ID and valid stream profiles");
     }
   }
 
@@ -97,18 +99,21 @@ class OrbbecCamera final : public IDepthCamera {
     device_ = SelectDevice();
     pipeline_ = std::make_shared<ob::Pipeline>(device_);
     stream_config_ = std::make_shared<ob::Config>();
-    const auto width = static_cast<std::uint32_t>(config_.width);
-    const auto height = static_cast<std::uint32_t>(config_.height);
-    const auto fps = static_cast<std::uint32_t>(config_.fps);
-    stream_config_->enableVideoStream(OB_STREAM_COLOR, width, height, fps,
-                                      OB_FORMAT_RGB);
-    stream_config_->enableVideoStream(OB_STREAM_DEPTH, width, height, fps,
-                                      OB_FORMAT_Y16);
+    stream_config_->enableVideoStream(
+        OB_STREAM_COLOR, static_cast<std::uint32_t>(config_.color_width),
+        static_cast<std::uint32_t>(config_.color_height),
+        static_cast<std::uint32_t>(config_.color_fps), OB_FORMAT_RGB);
+    stream_config_->enableVideoStream(
+        OB_STREAM_DEPTH, static_cast<std::uint32_t>(config_.depth_width),
+        static_cast<std::uint32_t>(config_.depth_height),
+        static_cast<std::uint32_t>(config_.depth_fps), OB_FORMAT_Y16);
     if (pipeline_->getStreamProfileList(OB_SENSOR_COLOR)->getCount() == 0 ||
         pipeline_->getStreamProfileList(OB_SENSOR_DEPTH)->getCount() == 0) {
       throw std::runtime_error("orbbec: device exposes no video profiles");
     }
-    align_ = std::make_shared<ob::Align>(OB_STREAM_COLOR);
+    if (config_.align_depth_to_color) {
+      align_ = std::make_shared<ob::Align>(OB_STREAM_COLOR);
+    }
     serial_ = DeviceSerial(*device_);
   }
 
@@ -163,11 +168,15 @@ class OrbbecCamera final : public IDepthCamera {
         if (raw_color == nullptr || raw_depth == nullptr) {
           continue;
         }
-        const auto processed = align_->process(raw);
-        if (processed == nullptr) {
-          continue;
+        if (align_ != nullptr) {
+          const auto processed = align_->process(raw);
+          if (processed == nullptr) {
+            continue;
+          }
+          frames = processed->as<ob::FrameSet>();
+        } else {
+          frames = raw;
         }
-        frames = processed->as<ob::FrameSet>();
       } catch (const ob::Error&) {
         continue;
       }

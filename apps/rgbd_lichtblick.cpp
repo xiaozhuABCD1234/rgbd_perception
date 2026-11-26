@@ -1,13 +1,14 @@
 #include <chrono>
 #include <csignal>
-#include <cstddef>
 #include <exception>
-#include <iostream>
 #include <memory>
 #include <stdexcept>
 #include <string>
 
+#include "app_support.hpp"
 #include "rgbd/cameras/factory.hpp"
+#include "rgbd/core/config.hpp"
+#include "rgbd/core/logging.hpp"
 #include "rgbd/io/lichtblick_server.hpp"
 #include "rgbd/io/local_web_server.hpp"
 #include "rgbd/io/mcap_image_writer.hpp"
@@ -15,35 +16,46 @@
 
 namespace {
 
-constexpr int kTimeoutMs = 1000;
-
 volatile std::sig_atomic_t g_stop = 0;
 
 void HandleSignal(int) { g_stop = 1; }
 
 struct Options {
-  std::string camera_uri = "gemini305://?width=640&height=480&fps=30";
+  rgbd::CameraConfig camera;
+  std::string camera_uri;
   std::string output;
   int frames = 0;
   int port = 8765;
   int http_port = 8080;
   std::string web_root = "data/lichtblick-web";
+  int timeout_ms = 1000;
 };
 
-int ParsePositiveInt(const std::string& value, const char* name) {
-  std::size_t parsed = 0;
-  const int result = std::stoi(value, &parsed);
-  if (parsed != value.size() || result <= 0) {
-    throw std::invalid_argument(std::string(name) + " must be positive");
+Options LoadOptions(const rgbd::Config& config) {
+  Options options;
+  const rgbd::app::CameraOptions camera = rgbd::app::LoadCameraOptions(config);
+  options.camera = camera.camera;
+  options.timeout_ms = camera.timeout_ms;
+  options.port = config.GetInt("lichtblick.websocket_port", options.port);
+  options.http_port = config.GetInt("lichtblick.http_port", options.http_port);
+  options.web_root = config.GetString("lichtblick.web_root", options.web_root);
+  if (options.port <= 0 || options.http_port <= 0) {
+    throw std::invalid_argument("Lichtblick ports must be positive");
   }
-  return result;
+  if (options.web_root.empty()) {
+    throw std::invalid_argument("lichtblick.web_root must not be empty");
+  }
+  return options;
 }
 
-Options ParseOptions(int argc, char** argv) {
-  Options options;
+Options ParseOptions(int argc, char** argv, Options options) {
   for (int index = 1; index < argc; ++index) {
     const std::string argument(argv[index]);
     if (argument == "--") {
+      continue;
+    }
+    if (argument == "--config") {
+      ++index;
       continue;
     }
     if (argument == "--camera") {
@@ -60,17 +72,18 @@ Options ParseOptions(int argc, char** argv) {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");
       }
-      options.frames = ParsePositiveInt(argv[index], "--frames");
+      options.frames = rgbd::app::ParsePositiveInt(argv[index], "--frames");
     } else if (argument == "--port") {
       if (++index >= argc) {
         throw std::invalid_argument("--port requires a value");
       }
-      options.port = ParsePositiveInt(argv[index], "--port");
+      options.port = rgbd::app::ParsePositiveInt(argv[index], "--port");
     } else if (argument == "--http-port") {
       if (++index >= argc) {
         throw std::invalid_argument("--http-port requires a value");
       }
-      options.http_port = ParsePositiveInt(argv[index], "--http-port");
+      options.http_port =
+          rgbd::app::ParsePositiveInt(argv[index], "--http-port");
     } else if (argument == "--web-root") {
       if (++index >= argc) {
         throw std::invalid_argument("--web-root requires a path");
@@ -83,12 +96,20 @@ Options ParseOptions(int argc, char** argv) {
   return options;
 }
 
-}
+}  // namespace
 
 int main(int argc, char** argv) {
   try {
-    const Options options = ParseOptions(argc, argv);
-    auto camera = rgbd::CreateCameraFromUri(options.camera_uri);
+    const rgbd::app::ConfigArgument config_argument =
+        rgbd::app::ParseConfigArgument(argc, argv);
+    rgbd::Config config;
+    rgbd::app::LoadConfig(config, config_argument);
+    rgbd::InitializeLogging(rgbd::LoadLoggingConfig(config));
+    const Options options = ParseOptions(argc, argv, LoadOptions(config));
+
+    auto camera = options.camera_uri.empty()
+                      ? rgbd::CreateCamera(options.camera)
+                      : rgbd::CreateCameraFromUri(options.camera_uri);
     rgbd::LichtblickServerConfig server_config;
     server_config.port = options.port;
     rgbd::LichtblickServer server(server_config);
@@ -107,22 +128,27 @@ int main(int argc, char** argv) {
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
 
-    std::cout << "rgbd_perception " << rgbd::kVersion << '\n';
-    std::cout << "WebSocket: " << server.Url() << '\n';
+    rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));
+    rgbd::LogInfo("WebSocket: " + server.Url());
     if (writer != nullptr) {
-      std::cout << "recording: " << options.output << '\n';
+      rgbd::LogInfo("recording: " + options.output);
     }
     server.Start();
     web_server.Start();
-    std::cout << "Browser: " << web_server.BrowserUrl() << '\n';
+    rgbd::LogInfo("Browser: " + web_server.BrowserUrl());
     camera->Open();
     camera->Start();
-    std::cout << "camera=" << camera->Name() << '\n';
+    if (options.camera_uri.empty()) {
+      rgbd::LogInfo("camera=" + camera->Name() + " " +
+                    rgbd::app::DescribeCamera(options.camera));
+    } else {
+      rgbd::LogInfo("camera=" + camera->Name());
+    }
 
     int received = 0;
     while (!g_stop && (options.frames == 0 || received < options.frames)) {
       rgbd::FrameSet frame;
-      if (!camera->Read(frame, std::chrono::milliseconds(kTimeoutMs))) {
+      if (!camera->Read(frame, std::chrono::milliseconds(options.timeout_ms))) {
         if (g_stop) {
           break;
         }
@@ -141,12 +167,14 @@ int main(int argc, char** argv) {
     server.Stop();
     if (writer != nullptr) {
       writer->Close();
-      std::cout << "saved=" << options.output
-                << " frames=" << writer->FrameCount() << '\n';
+      rgbd::LogInfo("saved " + options.output + " (" +
+                    std::to_string(writer->FrameCount()) + " frames)");
     }
+    rgbd::ShutdownLogging();
     return received > 0 ? 0 : 1;
   } catch (const std::exception& error) {
-    std::cerr << "error: " << error.what() << '\n';
+    rgbd::LogError(error.what());
+    rgbd::ShutdownLogging();
     return 1;
   }
 }

@@ -73,11 +73,13 @@ CameraIntrinsics IntrinsicsOf(const rs2::video_frame& frame) {
 class RealSenseCamera final : public IDepthCamera {
  public:
   explicit RealSenseCamera(RealSenseCameraConfig config)
-      : config_(std::move(config)), align_(RS2_STREAM_COLOR) {
-    if (config_.camera_id.empty() || config_.width == 0 ||
-        config_.height == 0 || config_.fps <= 0) {
+      : config_(std::move(config)) {
+    if (config_.camera_id.empty() || config_.depth_width == 0 ||
+        config_.depth_height == 0 || config_.depth_fps <= 0 ||
+        config_.color_width == 0 || config_.color_height == 0 ||
+        config_.color_fps <= 0) {
       throw std::invalid_argument(
-          "realsense camera requires an ID and a valid stream profile");
+          "realsense camera requires an ID and valid stream profiles");
     }
   }
 
@@ -104,12 +106,17 @@ class RealSenseCamera final : public IDepthCamera {
     if (!config_.serial.empty()) {
       stream_config_->enable_device(config_.serial);
     }
-    stream_config_->enable_stream(
-        RS2_STREAM_COLOR, static_cast<int>(config_.width),
-        static_cast<int>(config_.height), RS2_FORMAT_RGB8, config_.fps);
-    stream_config_->enable_stream(
-        RS2_STREAM_DEPTH, static_cast<int>(config_.width),
-        static_cast<int>(config_.height), RS2_FORMAT_Z16, config_.fps);
+    stream_config_->enable_stream(RS2_STREAM_COLOR,
+                                  static_cast<int>(config_.color_width),
+                                  static_cast<int>(config_.color_height),
+                                  RS2_FORMAT_RGB8, config_.color_fps);
+    stream_config_->enable_stream(RS2_STREAM_DEPTH,
+                                  static_cast<int>(config_.depth_width),
+                                  static_cast<int>(config_.depth_height),
+                                  RS2_FORMAT_Z16, config_.depth_fps);
+    if (config_.align_depth_to_color) {
+      align_ = std::make_unique<rs2::align>(RS2_STREAM_COLOR);
+    }
     serial_ = config_.serial;
   }
 
@@ -133,6 +140,7 @@ class RealSenseCamera final : public IDepthCamera {
 
   void Close() override {
     Stop();
+    align_.reset();
     stream_config_.reset();
     pipeline_.reset();
   }
@@ -151,7 +159,8 @@ class RealSenseCamera final : public IDepthCamera {
     if (!frames) {
       return false;
     }
-    const rs2::frameset aligned = align_.process(frames);
+    const rs2::frameset aligned =
+        align_ == nullptr ? frames : align_->process(frames);
     const rs2::video_frame color = aligned.get_color_frame();
     const rs2::depth_frame depth = aligned.get_depth_frame();
     if (!color || !depth) {
@@ -185,7 +194,7 @@ class RealSenseCamera final : public IDepthCamera {
   rs2::context context_;
   std::unique_ptr<rs2::pipeline> pipeline_;
   std::unique_ptr<rs2::config> stream_config_;
-  rs2::align align_;
+  std::unique_ptr<rs2::align> align_;
   std::string serial_;
   bool streaming_ = false;
 };

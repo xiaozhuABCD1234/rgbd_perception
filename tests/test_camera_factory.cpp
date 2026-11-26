@@ -48,6 +48,36 @@ RGBD_TEST(camera_factory_creates_synthetic_camera) {
   camera->Close();
 }
 
+RGBD_TEST(camera_config_creates_synthetic_camera) {
+  rgbd::CameraConfig config;
+  config.backend = "synthetic";
+  config.id = "configured";
+  config.color.width = 16;
+  config.color.height = 12;
+  config.color.fps = 10;
+  config.depth.width = 16;
+  config.depth.height = 12;
+  config.depth.fps = 10;
+  config.depth_m = 1.25F;
+  auto camera = rgbd::CreateCamera(config);
+  RGBD_CHECK(camera != nullptr);
+  RGBD_CHECK(camera->Name() == "configured");
+  camera->Open();
+  camera->Start();
+  rgbd::FrameSet frame;
+  RGBD_CHECK(camera->Read(frame, std::chrono::milliseconds(1)));
+  RGBD_CHECK(frame.color.width == 16);
+  RGBD_CHECK(frame.depth.height == 12);
+  RGBD_CHECK_NEAR(frame.depth.values.front(), 1.25F, 1e-6F);
+  camera->Close();
+}
+
+RGBD_TEST(camera_config_rejects_invalid_stream_format) {
+  rgbd::CameraConfig config;
+  config.depth.format = "y8";
+  RGBD_CHECK_THROW(rgbd::CreateCamera(config), std::invalid_argument);
+}
+
 RGBD_TEST(camera_factory_lists_available_schemes) {
   const std::vector<std::string> schemes = rgbd::AvailableCameraSchemes();
   bool has_synthetic = false;

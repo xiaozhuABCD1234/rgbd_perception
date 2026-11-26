@@ -30,9 +30,6 @@ build: configure
 test: build
     ctest --preset dev
 
-run *args: build
-    ./build/dev/rgbd_demo {{args}}
-
 viewer *args: build
     ./build/dev/rgbd_viewer {{args}}
 
@@ -86,10 +83,10 @@ submodules:
         git submodule add -f https://github.com/foxglove/mcap.git third_party/mcap
     fi
 
-gemini305 uri="gemini305://?width=640&height=480&fps=30" *args: sdk
+gemini305 *args: sdk
     cmake --preset gemini305
     cmake --build --preset gemini305 --parallel
-    ./build/gemini305/rgbd_viewer "{{uri}}" {{args}}
+    ./build/gemini305/rgbd_viewer {{args}}
 
 lichtblick-setup:
     #!/usr/bin/env bash

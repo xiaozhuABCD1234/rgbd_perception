@@ -16,6 +16,9 @@ option(RGBD_WITH_ORBBEC "Build the Orbbec Gemini 305 camera backend" OFF)
 option(RGBD_WITH_REALSENSE "Build the Intel RealSense D435i camera backend" OFF)
 option(RGBD_WITH_MCAP "Build the MCAP writer and Lichtblick app" ON)
 
+find_package(spdlog REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
 function(rgbd_set_project_warnings target)
   if(MSVC)
     target_compile_options(${target} PRIVATE /W4 /permissive-)
@@ -59,8 +62,10 @@ function(rgbd_configure_target target export_name)
 endfunction()
 
 add_library(rgbd_core
-  src/core/perception_pipeline.cpp
-  src/core/depth_estimator.cpp)
+  src/core/config.cpp
+  src/core/depth_estimator.cpp
+  src/core/logging.cpp
+  src/core/perception_pipeline.cpp)
 add_library(rgbd::core ALIAS rgbd_core)
 rgbd_configure_target(rgbd_core core)
 target_include_directories(rgbd_core
@@ -68,6 +73,7 @@ target_include_directories(rgbd_core
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+target_link_libraries(rgbd_core PRIVATE spdlog::spdlog yaml-cpp::yaml-cpp)
 
 add_library(rgbd_inference src/inference/tensor.cpp)
 add_library(rgbd::inference ALIAS rgbd_inference)
@@ -102,7 +108,7 @@ target_include_directories(rgbd_io
 target_link_libraries(rgbd_io PUBLIC rgbd::core)
 
 set(RGBD_MCAP_ENABLED OFF)
-set(RGBD_APPS rgbd_demo rgbd_viewer rgbd_replay)
+set(RGBD_APPS rgbd_viewer rgbd_replay)
 
 if(RGBD_WITH_MCAP)
   if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/mcap/cpp/mcap/include/mcap/writer.hpp")
@@ -260,11 +266,6 @@ configure_file(
   ${CMAKE_CURRENT_BINARY_DIR}/generated/rgbd/version.hpp
   @ONLY)
 
-add_executable(rgbd_demo apps/rgbd_demo.cpp)
-target_link_libraries(rgbd_demo PRIVATE rgbd::cameras rgbd::recognition)
-rgbd_set_project_warnings(rgbd_demo)
-rgbd_enable_sanitizers(rgbd_demo)
-
 add_executable(rgbd_viewer apps/rgbd_viewer.cpp)
 target_link_libraries(rgbd_viewer PRIVATE rgbd::cameras rgbd::recognition)
 rgbd_set_project_warnings(rgbd_viewer)
@@ -286,6 +287,7 @@ if(BUILD_TESTING)
   add_executable(rgbd_tests
     tests/test_main.cpp
     tests/test_camera_factory.cpp
+    tests/test_config.cpp
     tests/test_depth_estimator.cpp
     tests/test_geometry.cpp
     tests/test_pipeline.cpp
@@ -325,6 +327,10 @@ install(
 install(
   TARGETS ${RGBD_APPS}
   RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+install(
+  FILES config/rgbd.yaml
+  DESTINATION ${CMAKE_INSTALL_DATADIR}/rgbd_perception)
 
 install(
   DIRECTORY include/rgbd

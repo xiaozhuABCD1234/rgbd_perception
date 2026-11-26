@@ -18,7 +18,27 @@ struct CameraUri {
   std::map<std::string, std::string> parameters;
 };
 
+struct CameraStreamConfig {
+  std::size_t width = 848;
+  std::size_t height = 530;
+  int fps = 30;
+  std::string format = "y16";
+};
+
+struct CameraConfig {
+  std::string backend = "gemini305";
+  std::string id = "gemini305";
+  std::string serial;
+  CameraStreamConfig depth{848, 530, 30, "y16"};
+  CameraStreamConfig color{848, 530, 30, "rgb8"};
+  bool align_depth_to_color = true;
+  std::string source;
+  bool loop = false;
+  float depth_m = 2.0F;
+};
+
 std::optional<CameraUri> ParseCameraUri(std::string_view uri);
+std::unique_ptr<IDepthCamera> CreateCamera(const CameraConfig& config);
 std::unique_ptr<IDepthCamera> CreateCamera(const CameraUri& uri);
 std::unique_ptr<IDepthCamera> CreateCameraFromUri(std::string_view uri);
 std::vector<std::string> AvailableCameraSchemes();

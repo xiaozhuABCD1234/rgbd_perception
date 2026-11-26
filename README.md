@@ -38,6 +38,8 @@ cameras/realsense -> core
 - 支持 C++17 的 GCC 或 Clang
 - cpplint
 - clang-format
+- spdlog
+- yaml-cpp
 - 可选：Orbbec SDK v2
 - 可选：librealsense2
 - 可选：MCAP 子模块、Protobuf、nlohmann-json、libwebsockets，用于 Lichtblick 输出
@@ -73,22 +75,75 @@ just d435i
 ```text
 synthetic://?width=640&height=480&depth_m=2.0&fps=30
 replay:///path/to/session.rgbd?loop=true
-gemini305://?serial=...&width=640&height=480&fps=30
+gemini305://?serial=...&width=848&height=530&fps=30
 d435i://?serial=...&width=640&height=480&fps=30
 ```
 
-`gemini305` 需要 `RGBD_WITH_ORBBEC=ON`。`d435i` 需要 `RGBD_WITH_REALSENSE=ON`。
+`gemini305` 需要 `RGBD_WITH_ORBBEC=ON`。`d435i` 需要 `RGBD_WITH_REALSENSE=ON`。URI 只用于命令行临时覆盖，常规参数在 YAML 中配置。
+
+## 配置
+
+默认读取 `config/rgbd.yaml`，也可以用 `--config PATH` 指定其他文件。命令行参数会覆盖 YAML 中的同名字段。
+
+```yaml
+camera:
+  backend: gemini305
+  id: gemini305
+  serial: ""
+  depth:
+    width: 848
+    height: 530
+    fps: 30
+    format: y16
+  color:
+    width: 848
+    height: 530
+    fps: 30
+    format: rgb8
+  align_depth_to_color: true
+  timeout_ms: 1000
+
+logging:
+  level: info
+  pattern: "[%Y-%m-%d %H:%M:%S.%e] [%l] %v"
+  file: ""
+  queue_size: 8192
+  threads: 1
+
+lichtblick:
+  websocket_port: 8765
+  http_port: 8080
+  web_root: data/lichtblick-web
+
+replay:
+  path: ""
+  loop: false
+  timeout_ms: 1000
+
+algorithm:
+  recognition:
+    label: "object"
+    scale: 0.5
+    confidence: 1.0
+  depth:
+    roi_scale: 0.75
+    min_valid_pixels: 5
+    min_depth_m: 0.04
+    max_depth_m: 1.0
+    mad_scale: 3.0
+```
+
+`camera` 被 `rgbd_viewer` 和 `rgbd_lichtblick` 共用。Gemini 305 默认使用手册中的 848 x 530 @ 30fps、深度 Y16、彩色 RGB8 和 D2C 对齐，深度算法范围对应手册的 4–100cm 工作范围。`algorithm.recognition` 配置 `CenterBoxRecognizer`，`algorithm.depth` 配置 `RobustDepthFusionEstimator`。日志使用异步 spdlog，`logging.file` 为空时输出到 `stderr`，`queue_size` 和 `threads` 控制异步队列与工作线程。
 
 ## 应用
 
 ```bash
-rgbd_demo --frames 10
-rgbd_demo --camera "gemini305://?width=640&height=480&fps=30" --frames 100
+rgbd_viewer --frames 100
 rgbd_viewer "d435i://?width=640&height=480&fps=30" --frames 100
-rgbd_replay build/demo.rgbd
+rgbd_replay build/session.rgbd
 ```
 
-`rgbd_demo` 和 `rgbd_viewer` 支持 `--record PATH`。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
+`rgbd_viewer` 支持 `--record PATH`。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
 
 ### Gemini 305 + Lichtblick
 
@@ -121,7 +176,7 @@ just lichtblick-setup
 
 彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。按 `Ctrl+C` 停止。
 
-修改端口或同时录制 MCAP：
+端口来自 `config/rgbd.yaml`，也可以命令行覆盖；同时录制 MCAP：
 
 ```bash
 just gemini305-lichtblick -- --port 9000 --http-port 9001 --output gemini305.mcap
