@@ -2,10 +2,12 @@
 #define APPS_APP_SUPPORT_HPP_
 
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/core/config.hpp"
@@ -42,6 +44,21 @@ inline void LoadConfig(Config& config, const ConfigArgument& argument) {
   config.Load(argument.path);
 }
 
+inline float ParseFloat(const std::string& value, const char* name) {
+  try {
+    std::size_t parsed = 0;
+    const float result = std::stof(value, &parsed);
+    if (parsed != value.size()) {
+      throw std::invalid_argument(std::string(name) + " must be a number");
+    }
+    return result;
+  } catch (const std::invalid_argument&) {
+    throw std::invalid_argument(std::string(name) + " must be a number");
+  } catch (const std::out_of_range&) {
+    throw std::invalid_argument(std::string(name) + " is out of range");
+  }
+}
+
 inline int ParsePositiveInt(const std::string& value, const char* name) {
   try {
     std::size_t parsed = 0;
@@ -55,6 +72,24 @@ inline int ParsePositiveInt(const std::string& value, const char* name) {
   } catch (const std::out_of_range&) {
     throw std::invalid_argument(std::string(name) + " is out of range");
   }
+}
+
+inline std::vector<std::string> LoadLabels(const std::string& path) {
+  if (path.empty()) {
+    return {};
+  }
+  std::ifstream stream(path);
+  if (!stream) {
+    throw std::invalid_argument("failed to open labels file: " + path);
+  }
+  std::vector<std::string> labels;
+  std::string line;
+  while (std::getline(stream, line)) {
+    if (!line.empty()) {
+      labels.push_back(line);
+    }
+  }
+  return labels;
 }
 
 struct CameraOptions {

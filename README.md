@@ -29,7 +29,7 @@ cameras/orbbec -> core
 cameras/realsense -> core
 ```
 
-公共头文件不暴露任何厂商 SDK 类型。ONNX Runtime、TensorRT、OpenVINO 适配器放在 `src/inference/`，实现 `rgbd::IInferenceEngine`。YOLO、DETR、分割模型解码器放在 `src/recognition/`，实现 `rgbd::IVisionRecognizer`。
+公共头文件不暴露任何厂商 SDK 类型。OpenVINO 适配器放在 `src/inference/`，实现 `rgbd::IInferenceEngine`。YOLO26 检测和实例分割解码器放在 `src/recognition/`，实现 `rgbd::IVisionRecognizer`。
 
 ## 环境要求
 
@@ -40,6 +40,7 @@ cameras/realsense -> core
 - clang-format
 - spdlog
 - yaml-cpp
+- 可选：OpenVINO 2026.x，用于 YOLO26 CPU/GPU 推理
 - 可选：Orbbec SDK v2
 - 可选：librealsense2
 - 可选：MCAP 子模块、Protobuf、nlohmann-json、libwebsockets，用于 Lichtblick 输出
@@ -118,10 +119,11 @@ YAML 只保存深度相机参数，由 `rgbd_viewer` 和 `rgbd_lichtblick` 共�
 ```bash
 rgbd_viewer --frames 100
 rgbd_viewer "d435i://?width=640&height=480&fps=30" --frames 100
+rgbd_viewer --model models/yolo26n-seg.onnx --labels models/coco.txt --device GPU
 rgbd_replay build/session.rgbd
 ```
 
-`rgbd_viewer` 支持 `--record PATH`。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
+`rgbd_viewer` 支持 `--record PATH`。指定 `--model` 时使用 OpenVINO + YOLO26，`--device` 可选 `CPU`、`GPU` 或 `AUTO`；不指定时使用内置中心框识别器。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
 
 ### Gemini 305 + Lichtblick
 

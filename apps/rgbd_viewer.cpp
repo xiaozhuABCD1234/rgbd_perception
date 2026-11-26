@@ -1,6 +1,7 @@
 #include <chrono>
 #include <cstddef>
 #include <exception>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -17,6 +18,11 @@
 #include "rgbd/recognition/center_box_recognizer.hpp"
 #include "rgbd/version.hpp"
 
+#ifdef RGBD_WITH_OPENVINO
+#include "rgbd/inference/openvino_engine.hpp"
+#include "rgbd/recognition/yolo26_recognizer.hpp"
+#endif
+
 namespace {
 
 constexpr int kDefaultFrames = 60;
@@ -26,8 +32,14 @@ struct Options {
   rgbd::CameraConfig camera;
   std::string camera_uri;
   std::string recording_path;
+  std::string model_path;
+  std::string labels_path;
+  std::string device = "CPU";
   int frames = kDefaultFrames;
   int timeout_ms = 1000;
+  int input_size = 640;
+  float confidence = 0.25F;
+  float iou = 0.45F;
 };
 
 Options LoadOptions(const rgbd::Config& config) {
@@ -49,7 +61,43 @@ Options ParseOptions(int argc, char** argv, Options options) {
       ++index;
       continue;
     }
-    if (argument == "--frames") {
+    if (argument == "--model") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--model requires a path");
+      }
+      options.model_path = argv[index];
+    } else if (argument == "--labels") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--labels requires a path");
+      }
+      options.labels_path = argv[index];
+    } else if (argument == "--device") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--device requires a value");
+      }
+      options.device = argv[index];
+    } else if (argument == "--imgsz") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--imgsz requires a value");
+      }
+      options.input_size = rgbd::app::ParsePositiveInt(argv[index], "--imgsz");
+    } else if (argument == "--confidence") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--confidence requires a value");
+      }
+      options.confidence = rgbd::app::ParseFloat(argv[index], "--confidence");
+      if (options.confidence < 0.0F || options.confidence > 1.0F) {
+        throw std::invalid_argument("--confidence must be in [0, 1]");
+      }
+    } else if (argument == "--iou") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--iou requires a value");
+      }
+      options.iou = rgbd::app::ParseFloat(argv[index], "--iou");
+      if (options.iou < 0.0F || options.iou > 1.0F) {
+        throw std::invalid_argument("--iou must be in [0, 1]");
+      }
+    } else if (argument == "--frames") {
       if (++index >= argc) {
         throw std::invalid_argument("--frames requires a value");
       }
@@ -101,12 +149,31 @@ int main(int argc, char** argv) {
     auto camera = options.camera_uri.empty()
                       ? rgbd::CreateCamera(options.camera)
                       : rgbd::CreateCameraFromUri(options.camera_uri);
-    rgbd::CenterBoxRecognizer recognizer(
-        rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
+    std::unique_ptr<rgbd::IVisionRecognizer> recognizer;
+    if (options.model_path.empty()) {
+      recognizer = std::make_unique<rgbd::CenterBoxRecognizer>(
+          rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
+    } else {
+#ifdef RGBD_WITH_OPENVINO
+      auto engine = std::make_shared<rgbd::OpenVinoEngine>(
+          rgbd::OpenVinoConfig{options.device});
+      engine->Load(options.model_path);
+      rgbd::Yolo26Config yolo_config;
+      yolo_config.labels = rgbd::app::LoadLabels(options.labels_path);
+      yolo_config.input_width = options.input_size;
+      yolo_config.input_height = options.input_size;
+      yolo_config.confidence_threshold = options.confidence;
+      yolo_config.iou_threshold = options.iou;
+      recognizer =
+          std::make_unique<rgbd::Yolo26Recognizer>(engine, yolo_config);
+#else
+      throw std::runtime_error("OpenVINO support is not built");
+#endif
+    }
     rgbd::RobustDepthFusionEstimator depth_estimator(rgbd::DepthFusionConfig{
         0.75F, 5, options.camera.depth_control.min_depth_m,
         options.camera.depth_control.max_depth_m, 3.0F});
-    rgbd::PerceptionPipeline pipeline(recognizer, depth_estimator);
+    rgbd::PerceptionPipeline pipeline(*recognizer, depth_estimator);
     std::unique_ptr<rgbd::RecordingWriter> recorder;
     if (!options.recording_path.empty()) {
       recorder =
@@ -114,6 +181,10 @@ int main(int argc, char** argv) {
     }
 
     rgbd::LogInfo("rgbd_perception " + std::string(rgbd::kVersion));
+    if (!options.model_path.empty()) {
+      rgbd::LogInfo("model=" + options.model_path +
+                    " device=" + options.device);
+    }
     camera->Open();
     camera->Start();
     if (options.camera_uri.empty()) {

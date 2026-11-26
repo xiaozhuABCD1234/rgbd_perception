@@ -15,6 +15,7 @@ option(RGBD_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSani
 option(RGBD_WITH_ORBBEC "Build the Orbbec Gemini 305 camera backend" OFF)
 option(RGBD_WITH_REALSENSE "Build the Intel RealSense D435i camera backend" OFF)
 option(RGBD_WITH_MCAP "Build the MCAP writer and Lichtblick app" ON)
+option(RGBD_WITH_OPENVINO "Build the OpenVINO inference backend" ON)
 
 find_package(spdlog REQUIRED)
 find_package(yaml-cpp REQUIRED)
@@ -85,7 +86,9 @@ target_include_directories(rgbd_inference
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(rgbd_inference PUBLIC rgbd::core)
 
-add_library(rgbd_recognition src/recognition/center_box_recognizer.cpp)
+add_library(rgbd_recognition
+  src/recognition/center_box_recognizer.cpp
+  src/recognition/yolo26_recognizer.cpp)
 add_library(rgbd::recognition ALIAS rgbd_recognition)
 rgbd_configure_target(rgbd_recognition recognition)
 target_include_directories(rgbd_recognition
@@ -106,6 +109,27 @@ target_include_directories(rgbd_io
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(rgbd_io PUBLIC rgbd::core)
+
+set(RGBD_OPENVINO_ENABLED OFF)
+if(RGBD_WITH_OPENVINO)
+  find_package(OpenVINO QUIET COMPONENTS Runtime ONNX)
+  if(OpenVINO_FOUND)
+    add_library(rgbd_openvino src/inference/openvino_engine.cpp)
+    add_library(rgbd::openvino ALIAS rgbd_openvino)
+    rgbd_configure_target(rgbd_openvino openvino)
+    target_include_directories(rgbd_openvino
+      PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    target_link_libraries(rgbd_openvino
+      PUBLIC rgbd::inference
+      PRIVATE openvino::runtime openvino::frontend::onnx)
+    set(RGBD_OPENVINO_ENABLED ON)
+  else()
+    message(STATUS "OpenVINO not found; RGBD_WITH_OPENVINO is disabled")
+  endif()
+endif()
 
 set(RGBD_MCAP_ENABLED OFF)
 set(RGBD_APPS rgbd_viewer rgbd_replay)
@@ -208,6 +232,10 @@ if(RGBD_MCAP_ENABLED)
   list(APPEND RGBD_EXPORT_TARGETS rgbd_mcap)
 endif()
 
+if(RGBD_OPENVINO_ENABLED)
+  list(APPEND RGBD_EXPORT_TARGETS rgbd_openvino)
+endif()
+
 if(RGBD_WITH_ORBBEC)
   if(NOT DEFINED OrbbecSDK_DIR)
     set(OrbbecSDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/_sdk/install/lib")
@@ -268,6 +296,10 @@ configure_file(
 
 add_executable(rgbd_viewer apps/rgbd_viewer.cpp)
 target_link_libraries(rgbd_viewer PRIVATE rgbd::cameras rgbd::recognition)
+if(RGBD_OPENVINO_ENABLED)
+  target_link_libraries(rgbd_viewer PRIVATE rgbd::openvino)
+  target_compile_definitions(rgbd_viewer PRIVATE RGBD_WITH_OPENVINO=1)
+endif()
 rgbd_set_project_warnings(rgbd_viewer)
 rgbd_enable_sanitizers(rgbd_viewer)
 
@@ -293,7 +325,8 @@ if(BUILD_TESTING)
     tests/test_pipeline.cpp
     tests/test_recording.cpp
     tests/test_synthetic_camera.cpp
-    tests/test_tensor.cpp)
+    tests/test_tensor.cpp
+    tests/test_yolo26_recognizer.cpp)
   target_include_directories(rgbd_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
   target_link_libraries(rgbd_tests PRIVATE
     rgbd::cameras

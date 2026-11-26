@@ -5,6 +5,10 @@ include(CMakeFindDependencyMacro)
 find_dependency(spdlog)
 find_dependency(yaml-cpp)
 
+if(@RGBD_OPENVINO_ENABLED@)
+  find_dependency(OpenVINO COMPONENTS Runtime ONNX)
+endif()
+
 if(@RGBD_MCAP_ENABLED@)
   find_dependency(Protobuf)
   find_dependency(nlohmann_json)
