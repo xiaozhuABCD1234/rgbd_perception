@@ -15,6 +15,7 @@ namespace internal {
 std::string FoxgloveRawImageDescriptor();
 std::string FoxgloveCameraCalibrationDescriptor();
 std::string FoxgloveSceneUpdateDescriptor();
+std::string FoxgloveImageAnnotationsDescriptor();
 std::string SerializeFoxgloveRawImage(const FrameSet& frame,
                                       std::int64_t timestamp,
                                       const std::string& frame_id,
@@ -27,6 +28,9 @@ std::string SerializeFoxgloveCameraCalibration(const FrameSet& frame,
 std::string SerializeFoxgloveSceneUpdate(
     std::int64_t timestamp, const std::string& frame_id,
     const std::vector<ObjectObservation>& observations);
+
+std::string SerializeFoxgloveImageAnnotations(
+    std::int64_t timestamp, const std::vector<ObjectObservation>& observations);
 
 }
 }

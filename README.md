@@ -143,9 +143,11 @@ rgbd_viewer --model models/yolo26n-seg.onnx --labels config/coco.txt --device GP
 rgbd_replay build/session.rgbd
 ```
 
-`rgbd_viewer` 支持 `--record PATH`。指定 `--model` 时使用 OpenVINO + YOLO26，`--device` 可选 `CPU`、`GPU` 或 `AUTO`；不指定时使用内置中心框识别器。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
+`rgbd_viewer` 支持 `--record PATH`。指定 `--model` 时使用 OpenVINO + YOLO26，`--device` 可选 `CPU`、`GPU` 或 `AUTO`；不指定时使用内置中心框识别器。YOLO 检测默认启用 IoU 跟踪、置信度平滑和连续帧确认，可用 `--no-filter` 关闭。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
 
 识别结果会进入深度点云聚类：使用检测框或分割 mask 采样深度点，体素去重后做连通聚类，取最大簇计算几何中心和 PCA 外接立方体。可用 `--cluster-voxel`（体素/聚类距离，米）、`--min-cluster-points` 和 `--cluster-stride` 调整。`rgbd_viewer` 会打印 `center=(x, y, z) size=(x, y, z)`。
+
+检测默认经过时序滤波：同类别目标按 IoU 关联，连续 2 帧确认，丢失 3 帧后移除，检测框和置信度使用 EMA 平滑。可用 `--no-filter` 关闭。
 
 ### Gemini 305 + Lichtblick
 
@@ -189,9 +191,10 @@ just lichtblick-setup
 /camera/depth/image_raw
 /camera/color/camera_info
 /perception/objects
+/perception/detections
 ```
 
-彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。`/perception/objects` 使用 `foxglove.SceneUpdate`，每个目标发布一个带位置、姿态和尺寸的 `CubePrimitive`，并附带类别、置信度和点数元数据。坐标从相机光学坐标系转换到 Foxglove 的 x 前、y 左、z 上显示坐标系。内置布局已包含 3D 面板。按 `Ctrl+C` 停止。
+彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。`/perception/objects` 使用 `foxglove.SceneUpdate`，每个目标发布一个带位置、姿态和尺寸的 `CubePrimitive`，并附带类别、置信度和点数元数据。`/perception/detections` 使用 `foxglove.ImageAnnotations`，把滤波后的 YOLO 检测框和类别/置信度文字叠加到彩色图像面板。坐标从相机光学坐标系转换到 Foxglove 的 x 前、y 左、z 上显示坐标系。内置布局已包含 3D 面板和检测标注。按 `Ctrl+C` 停止。
 
 带 YOLO26 和 OpenVINO 的实时命令：
 

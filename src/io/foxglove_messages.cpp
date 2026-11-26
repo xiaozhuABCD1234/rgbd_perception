@@ -7,12 +7,15 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iomanip>
 #include <set>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "foxglove/CameraCalibration.pb.h"
+#include "foxglove/ImageAnnotations.pb.h"
 #include "foxglove/RawImage.pb.h"
 #include "foxglove/SceneUpdate.pb.h"
 
@@ -70,6 +73,10 @@ std::string FoxgloveCameraCalibrationDescriptor() {
 
 std::string FoxgloveSceneUpdateDescriptor() {
   return DescriptorSet(foxglove::SceneUpdate::descriptor());
+}
+
+std::string FoxgloveImageAnnotationsDescriptor() {
+  return DescriptorSet(foxglove::ImageAnnotations::descriptor());
 }
 
 std::string SerializeFoxgloveRawImage(const FrameSet& frame,
@@ -172,6 +179,20 @@ void SetVector3(const Point3f& value, foxglove::Vector3* output) {
   output->set_z(value.z);
 }
 
+void SetColor(const std::array<double, 3>& color, double alpha,
+              foxglove::Color* output) {
+  output->set_r(color[0]);
+  output->set_g(color[1]);
+  output->set_b(color[2]);
+  output->set_a(alpha);
+}
+
+std::string ConfidenceText(float confidence) {
+  std::ostringstream stream;
+  stream << std::fixed << std::setprecision(2) << confidence;
+  return stream.str();
+}
+
 std::array<double, 3> ColorForLabel(const std::string& label) {
   std::uint32_t hash = 2166136261U;
   for (const char character : label) {
@@ -247,6 +268,56 @@ std::string SerializeFoxgloveSceneUpdate(
   std::string payload;
   if (!update.SerializeToString(&payload)) {
     throw std::runtime_error("failed to serialize Foxglove SceneUpdate");
+  }
+  return payload;
+}
+
+std::string SerializeFoxgloveImageAnnotations(
+    std::int64_t timestamp,
+    const std::vector<ObjectObservation>& observations) {
+  foxglove::ImageAnnotations annotations;
+  SetTimestamp(timestamp, annotations.mutable_timestamp());
+
+  for (const ObjectObservation& observation : observations) {
+    if (!observation.detection.box.Valid()) {
+      continue;
+    }
+    const auto& box = observation.detection.box;
+    const std::array<double, 3> color =
+        ColorForLabel(observation.detection.label);
+
+    auto* points = annotations.add_points();
+    SetTimestamp(timestamp, points->mutable_timestamp());
+    points->set_type(foxglove::PointsAnnotation_Type_LINE_LOOP);
+    points->set_thickness(2.0);
+    SetColor(color, 1.0, points->mutable_outline_color());
+    const std::array<std::array<double, 2>, 4> corners{{
+        {{static_cast<double>(box.x), static_cast<double>(box.y)}},
+        {{static_cast<double>(box.x + box.width), static_cast<double>(box.y)}},
+        {{static_cast<double>(box.x + box.width),
+          static_cast<double>(box.y + box.height)}},
+        {{static_cast<double>(box.x), static_cast<double>(box.y + box.height)}},
+    }};
+    for (const auto& corner : corners) {
+      auto* point = points->add_points();
+      point->set_x(corner[0]);
+      point->set_y(corner[1]);
+    }
+
+    auto* text = annotations.add_texts();
+    SetTimestamp(timestamp, text->mutable_timestamp());
+    text->mutable_position()->set_x(static_cast<double>(box.x) + 4.0);
+    text->mutable_position()->set_y(static_cast<double>(box.y) + 16.0);
+    text->set_text(observation.detection.label + " " +
+                   ConfidenceText(observation.detection.confidence));
+    text->set_font_size(14.0);
+    SetColor({1.0, 1.0, 1.0}, 1.0, text->mutable_text_color());
+    SetColor({0.0, 0.0, 0.0}, 0.55, text->mutable_background_color());
+  }
+
+  std::string payload;
+  if (!annotations.SerializeToString(&payload)) {
+    throw std::runtime_error("failed to serialize Foxglove ImageAnnotations");
   }
   return payload;
 }

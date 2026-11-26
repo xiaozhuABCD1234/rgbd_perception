@@ -89,6 +89,7 @@ target_link_libraries(rgbd_inference PUBLIC rgbd::core)
 
 add_library(rgbd_recognition
   src/recognition/center_box_recognizer.cpp
+  src/recognition/detection_filter.cpp
   src/recognition/yolo26_recognizer.cpp)
 add_library(rgbd::recognition ALIAS rgbd_recognition)
 rgbd_configure_target(rgbd_recognition recognition)
@@ -168,7 +169,12 @@ if(RGBD_WITH_MCAP)
       Pose
       Vector3
       Quaternion
-      Point3)
+      Point3
+      ImageAnnotations
+      CircleAnnotation
+      PointsAnnotation
+      TextAnnotation
+      Point2)
     set(RGBD_PROTO_FILES
       "${RGBD_PROTO_DIR}/foxglove/RawImage.proto"
       "${RGBD_PROTO_DIR}/foxglove/CameraCalibration.proto")
@@ -351,6 +357,7 @@ if(BUILD_TESTING)
     tests/test_main.cpp
     tests/test_camera_factory.cpp
     tests/test_config.cpp
+    tests/test_detection_filter.cpp
     tests/test_depth_estimator.cpp
     tests/test_geometry.cpp
     tests/test_object_geometry.cpp

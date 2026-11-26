@@ -8,12 +8,14 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/core/config.hpp"
 #include "rgbd/core/recognizer.hpp"
 #include "rgbd/recognition/center_box_recognizer.hpp"
+#include "rgbd/recognition/detection_filter.hpp"
 
 #ifdef RGBD_WITH_OPENVINO
 #include "rgbd/inference/openvino_engine.hpp"
@@ -108,6 +110,8 @@ struct RecognizerOptions {
   int input_size = 640;
   float confidence = 0.25F;
   float iou = 0.45F;
+  bool enable_filter = true;
+  DetectionFilterConfig filter;
 };
 
 inline std::unique_ptr<IVisionRecognizer> CreateRecognizer(
@@ -126,7 +130,12 @@ inline std::unique_ptr<IVisionRecognizer> CreateRecognizer(
   config.input_height = options.input_size;
   config.confidence_threshold = options.confidence;
   config.iou_threshold = options.iou;
-  return std::make_unique<Yolo26Recognizer>(engine, config);
+  auto recognizer = std::make_unique<Yolo26Recognizer>(engine, config);
+  if (!options.enable_filter) {
+    return recognizer;
+  }
+  return std::make_unique<FilteringRecognizer>(std::move(recognizer),
+                                               options.filter);
 #else
   throw std::runtime_error("OpenVINO support is not built");
 #endif

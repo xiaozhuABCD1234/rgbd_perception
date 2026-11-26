@@ -29,6 +29,7 @@ constexpr std::uint64_t kColorChannel = 1;
 constexpr std::uint64_t kDepthChannel = 2;
 constexpr std::uint64_t kCalibrationChannel = 3;
 constexpr std::uint64_t kSceneChannel = 4;
+constexpr std::uint64_t kAnnotationsChannel = 5;
 
 std::int64_t NowNs() {
   return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -131,6 +132,8 @@ class LichtblickServer::Impl {
     const std::string calibration_schema =
         internal::FoxgloveCameraCalibrationDescriptor();
     const std::string scene_schema = internal::FoxgloveSceneUpdateDescriptor();
+    const std::string annotations_schema =
+        internal::FoxgloveImageAnnotationsDescriptor();
     nlohmann::json server_info;
     server_info["op"] = "serverInfo";
     server_info["name"] = config.name;
@@ -150,7 +153,10 @@ class LichtblickServer::Impl {
                          "foxglove.CameraCalibration", calibration_schema)),
          nlohmann::json::parse(ChannelJson(kSceneChannel, "/perception/objects",
                                            "foxglove.SceneUpdate",
-                                           scene_schema))});
+                                           scene_schema)),
+         nlohmann::json::parse(
+             ChannelJson(kAnnotationsChannel, "/perception/detections",
+                         "foxglove.ImageAnnotations", annotations_schema))});
     advertise_json = advertise.dump();
   }
 
@@ -211,40 +217,75 @@ class LichtblickServer::Impl {
       }
     }
     const std::int64_t timestamp = NowNs();
-    const std::string color_payload = internal::SerializeFoxgloveRawImage(
-        frame, timestamp, config.frame_id, "rgb8",
-        static_cast<std::uint32_t>(frame.color.width * ColorImage::channels),
-        frame.color.pixels.data(), frame.color.pixels.size());
-    std::vector<std::uint16_t> depth_mm(frame.depth.values.size());
-    for (std::size_t index = 0; index < frame.depth.values.size(); ++index) {
-      const float meters = frame.depth.values[index];
-      std::uint16_t value = 0;
-      if (meters >= config.min_depth_m && meters <= config.max_depth_m) {
-        const float scaled = meters * 1000.0F;
-        value = scaled >= 65535.0F ? 65535U
-                                   : static_cast<std::uint16_t>(scaled + 0.5F);
-      }
-      depth_mm[index] = value;
+    const bool want_color = HasSubscribers(kColorChannel);
+    const bool want_depth = HasSubscribers(kDepthChannel);
+    const bool want_calibration = HasSubscribers(kCalibrationChannel);
+    const bool want_scene = HasSubscribers(kSceneChannel);
+    const bool want_annotations = HasSubscribers(kAnnotationsChannel);
+
+    std::string color_payload;
+    if (want_color) {
+      color_payload = internal::SerializeFoxgloveRawImage(
+          frame, timestamp, config.frame_id, "rgb8",
+          static_cast<std::uint32_t>(frame.color.width * ColorImage::channels),
+          frame.color.pixels.data(), frame.color.pixels.size());
     }
-    const std::string depth_payload = internal::SerializeFoxgloveRawImage(
-        frame, timestamp, config.frame_id, "mono16",
-        static_cast<std::uint32_t>(frame.depth.width * sizeof(std::uint16_t)),
-        depth_mm.data(), depth_mm.size() * sizeof(std::uint16_t));
-    const std::string calibration_payload =
-        internal::SerializeFoxgloveCameraCalibration(frame, timestamp,
-                                                     config.frame_id);
-    const std::string scene_payload = internal::SerializeFoxgloveSceneUpdate(
-        timestamp, config.frame_id, observations);
+    std::string depth_payload;
+    if (want_depth) {
+      std::vector<std::uint16_t> depth_mm(frame.depth.values.size());
+      for (std::size_t index = 0; index < frame.depth.values.size(); ++index) {
+        const float meters = frame.depth.values[index];
+        std::uint16_t value = 0;
+        if (meters >= config.min_depth_m && meters <= config.max_depth_m) {
+          const float scaled = meters * 1000.0F;
+          value = scaled >= 65535.0F
+                      ? 65535U
+                      : static_cast<std::uint16_t>(scaled + 0.5F);
+        }
+        depth_mm[index] = value;
+      }
+      depth_payload = internal::SerializeFoxgloveRawImage(
+          frame, timestamp, config.frame_id, "mono16",
+          static_cast<std::uint32_t>(frame.depth.width * sizeof(std::uint16_t)),
+          depth_mm.data(), depth_mm.size() * sizeof(std::uint16_t));
+    }
+    std::string calibration_payload;
+    if (want_calibration) {
+      calibration_payload = internal::SerializeFoxgloveCameraCalibration(
+          frame, timestamp, config.frame_id);
+    }
+    std::string scene_payload;
+    if (want_scene) {
+      scene_payload = internal::SerializeFoxgloveSceneUpdate(
+          timestamp, config.frame_id, observations);
+    }
+    std::string annotations_payload;
+    if (want_annotations) {
+      annotations_payload =
+          internal::SerializeFoxgloveImageAnnotations(timestamp, observations);
+    }
 
     bool queued = false;
     {
       std::lock_guard<std::mutex> lock(mutex);
       for (SessionState* state : sessions) {
-        QueueSubscriptions(state, kColorChannel, timestamp, color_payload);
-        QueueSubscriptions(state, kDepthChannel, timestamp, depth_payload);
-        QueueSubscriptions(state, kCalibrationChannel, timestamp,
-                           calibration_payload);
-        QueueSubscriptions(state, kSceneChannel, timestamp, scene_payload);
+        if (want_color) {
+          QueueSubscriptions(state, kColorChannel, timestamp, color_payload);
+        }
+        if (want_depth) {
+          QueueSubscriptions(state, kDepthChannel, timestamp, depth_payload);
+        }
+        if (want_calibration) {
+          QueueSubscriptions(state, kCalibrationChannel, timestamp,
+                             calibration_payload);
+        }
+        if (want_scene) {
+          QueueSubscriptions(state, kSceneChannel, timestamp, scene_payload);
+        }
+        if (want_annotations) {
+          QueueSubscriptions(state, kAnnotationsChannel, timestamp,
+                             annotations_payload);
+        }
         queued = queued || !state->queue.empty();
       }
     }
@@ -401,6 +442,17 @@ class LichtblickServer::Impl {
       lws_callback_on_writable(session->state->wsi);
     }
     return 0;
+  }
+
+  [[nodiscard]] bool HasSubscribers(std::uint64_t channel_id) {
+    std::lock_guard<std::mutex> lock(mutex);
+    for (const SessionState* state : sessions) {
+      const auto found = state->subscriptions.find(channel_id);
+      if (found != state->subscriptions.end() && !found->second.empty()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   void QueueSubscriptions(SessionState* state, std::uint64_t channel_id,

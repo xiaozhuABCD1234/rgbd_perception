@@ -32,7 +32,11 @@ constexpr char kLayoutJson[] = R"({
         "calibrationTopic": "/camera/color/camera_info",
         "synchronize": false,
         "rotation": 0,
-        "annotations": {}
+        "annotations": {
+          "/perception/detections": {
+            "visible": true
+          }
+        }
       }
     },
     "Image!depth": {

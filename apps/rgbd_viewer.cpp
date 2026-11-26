@@ -35,6 +35,7 @@ struct Options {
   int input_size = 640;
   float confidence = 0.25F;
   float iou = 0.45F;
+  bool filter = true;
   int cluster_stride = 2;
   float cluster_voxel_m = 0.025F;
   int min_cluster_points = 20;
@@ -95,6 +96,8 @@ Options ParseOptions(int argc, char** argv, Options options) {
       if (options.iou < 0.0F || options.iou > 1.0F) {
         throw std::invalid_argument("--iou must be in [0, 1]");
       }
+    } else if (argument == "--no-filter") {
+      options.filter = false;
     } else if (argument == "--cluster-stride") {
       if (++index >= argc) {
         throw std::invalid_argument("--cluster-stride requires a value");
@@ -182,6 +185,7 @@ int main(int argc, char** argv) {
     recognizer_options.input_size = options.input_size;
     recognizer_options.confidence = options.confidence;
     recognizer_options.iou = options.iou;
+    recognizer_options.enable_filter = options.filter;
     const std::unique_ptr<rgbd::IVisionRecognizer> recognizer =
         rgbd::app::CreateRecognizer(recognizer_options);
     rgbd::RobustDepthFusionEstimator depth_estimator(rgbd::DepthFusionConfig{
