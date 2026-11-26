@@ -9,6 +9,7 @@
 
 #include "rgbd/cameras/factory.hpp"
 #include "rgbd/io/lichtblick_server.hpp"
+#include "rgbd/io/local_web_server.hpp"
 #include "rgbd/io/mcap_image_writer.hpp"
 #include "rgbd/version.hpp"
 
@@ -26,6 +27,8 @@ struct Options {
   std::string output;
   int frames = 0;
   int port = 8765;
+  int http_port = 8080;
+  std::string web_root = "data/lichtblick-web";
 };
 
 int ParsePositiveInt(const std::string& value, const char* name) {
@@ -64,6 +67,16 @@ Options ParseOptions(int argc, char** argv) {
         throw std::invalid_argument("--port requires a value");
       }
       options.port = ParsePositiveInt(argv[index], "--port");
+    } else if (argument == "--http-port") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--http-port requires a value");
+      }
+      options.http_port = ParsePositiveInt(argv[index], "--http-port");
+    } else if (argument == "--web-root") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--web-root requires a path");
+      }
+      options.web_root = argv[index];
     } else {
       throw std::invalid_argument("unknown argument: " + argument);
     }
@@ -80,6 +93,11 @@ int main(int argc, char** argv) {
     rgbd::LichtblickServerConfig server_config;
     server_config.port = options.port;
     rgbd::LichtblickServer server(server_config);
+    rgbd::LocalWebServerConfig web_config;
+    web_config.web_root = options.web_root;
+    web_config.port = options.http_port;
+    web_config.websocket_url = server.Url();
+    rgbd::LocalWebServer web_server(web_config);
     std::unique_ptr<rgbd::McapImageWriter> writer;
     if (!options.output.empty()) {
       rgbd::McapImageWriterConfig writer_config;
@@ -92,11 +110,12 @@ int main(int argc, char** argv) {
 
     std::cout << "rgbd_perception " << rgbd::kVersion << '\n';
     std::cout << "WebSocket: " << server.Url() << '\n';
-    std::cout << "Browser: " << server.BrowserUrl() << '\n';
     if (writer != nullptr) {
       std::cout << "recording: " << options.output << '\n';
     }
     server.Start();
+    web_server.Start();
+    std::cout << "Browser: " << web_server.BrowserUrl() << '\n';
     camera->Open();
     camera->Start();
     std::cout << "camera=" << camera->Name() << '\n';
@@ -123,6 +142,7 @@ int main(int argc, char** argv) {
 
     camera->Stop();
     camera->Close();
+    web_server.Stop();
     server.Stop();
     if (writer != nullptr) {
       writer->Close();

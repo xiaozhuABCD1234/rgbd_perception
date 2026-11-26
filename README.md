@@ -98,19 +98,20 @@ rgbd_replay build/demo.rgbd
 just gemini305-lichtblick
 ```
 
-默认 WebSocket 地址：
+默认地址：
 
 ```text
-ws://localhost:8765
+WebSocket: ws://localhost:8765
+Browser:   http://127.0.0.1:8080/?ds=foxglove-websocket&ds.url=ws%3A%2F%2Flocalhost%3A8765&layoutUrl=http%3A%2F%2F127.0.0.1%3A8080%2Frgbd-layout.json
 ```
 
-浏览器直接打开：
+Lichtblick Web 静态资源从 `data/lichtblick-web` 读取，由程序内置的 HTTP 服务托管在 `127.0.0.1:8080`。首次运行可执行：
 
-```text
-https://lichtblick-suite.github.io/lichtblick/?ds=foxglove-websocket&ds.url=ws%3A%2F%2Flocalhost%3A8765
+```bash
+just lichtblick-setup
 ```
 
-程序启动时也会打印这个浏览器地址。图像话题：
+图像话题：
 
 ```text
 /camera/color/image_raw
@@ -123,7 +124,7 @@ https://lichtblick-suite.github.io/lichtblick/?ds=foxglove-websocket&ds.url=ws%3
 修改端口或同时录制 MCAP：
 
 ```bash
-just gemini305-lichtblick -- --port 9000 --output gemini305.mcap
+just gemini305-lichtblick -- --port 9000 --http-port 9001 --output gemini305.mcap
 ```
 
 MCAP 写入器位于 `rgbd/io`，不依赖 ROS。

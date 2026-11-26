@@ -91,7 +91,24 @@ gemini305 uri="gemini305://?width=640&height=480&fps=30" *args: sdk
     cmake --build --preset gemini305 --parallel
     ./build/gemini305/rgbd_viewer "{{uri}}" {{args}}
 
-gemini305-lichtblick *args: sdk
+lichtblick-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p data
+    if [[ -f data/lichtblick-web/index.html ]]; then
+        exit 0
+    fi
+    if [[ -f ../neo-nav/data/lichtblick-web/index.html ]]; then
+        ln -s ../../neo-nav/data/lichtblick-web data/lichtblick-web
+        exit 0
+    fi
+    curl -L --fail --retry 3 -o data/lichtblick-web.tar.gz \
+        "https://github.com/lichtblick-suite/lichtblick/releases/download/v1.31.0/lichtblick-web.tar.gz"
+    mkdir -p data/lichtblick-web
+    tar -xzf data/lichtblick-web.tar.gz -C data/lichtblick-web
+    rm data/lichtblick-web.tar.gz
+
+gemini305-lichtblick *args: sdk lichtblick-setup
     git submodule update --init --depth 1 -- third_party/mcap
     cmake --preset gemini305
     cmake --build --preset gemini305 --parallel

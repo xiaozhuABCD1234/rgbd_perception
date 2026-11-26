@@ -149,6 +149,7 @@ if(RGBD_WITH_MCAP)
 
     add_library(rgbd_mcap
       src/io/foxglove_messages.cpp
+      src/io/local_web_server.cpp
       src/io/lichtblick_server.cpp
       src/io/mcap_implementation.cpp
       src/io/mcap_image_writer.cpp

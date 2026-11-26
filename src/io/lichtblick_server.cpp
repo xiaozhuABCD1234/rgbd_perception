@@ -35,24 +35,6 @@ std::int64_t NowNs() {
       .count();
 }
 
-std::string UrlEncode(const std::string& input) {
-  static constexpr char kHex[] = "0123456789ABCDEF";
-  std::string output;
-  for (const unsigned char character : input) {
-    if ((character >= 'a' && character <= 'z') ||
-        (character >= 'A' && character <= 'Z') ||
-        (character >= '0' && character <= '9') || character == '-' ||
-        character == '_' || character == '.' || character == '~') {
-      output.push_back(static_cast<char>(character));
-    } else {
-      output.push_back('%');
-      output.push_back(kHex[character >> 4U]);
-      output.push_back(kHex[character & 0x0FU]);
-    }
-  }
-  return output;
-}
-
 std::string Base64(const std::string& input) {
   static constexpr char kTable[] =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -259,12 +241,6 @@ class LichtblickServer::Impl {
     return "ws://localhost:" + std::to_string(config.port);
   }
 
-  [[nodiscard]] std::string BrowserUrl() const {
-    return "https://lichtblick-suite.github.io/lichtblick/"
-           "?ds=foxglove-websocket&ds.url=" +
-           UrlEncode(Url());
-  }
-
   [[nodiscard]] int Port() const noexcept { return config.port; }
 
   int Callback(lws* wsi, lws_callback_reasons reason, void* user, void* in,
@@ -445,8 +421,6 @@ void LichtblickServer::Stop() { impl_->Stop(); }
 void LichtblickServer::Publish(const FrameSet& frame) { impl_->Publish(frame); }
 
 std::string LichtblickServer::Url() const { return impl_->Url(); }
-
-std::string LichtblickServer::BrowserUrl() const { return impl_->BrowserUrl(); }
 
 int LichtblickServer::Port() const noexcept { return impl_->Port(); }
 
