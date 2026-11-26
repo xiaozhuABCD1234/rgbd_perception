@@ -18,12 +18,8 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends cmake ninja-build g++ python3 python3-venv
-
-      - name: Install lint tools
-        run: |
-          python3 -m venv .venv
-          .venv/bin/python -m pip install -r requirements-dev.txt
+          sudo apt-get install --yes --no-install-recommends \
+            cmake ninja-build g++ clang-format clang-tidy cpplint
 
       - name: Configure
         run: cmake --preset dev
@@ -36,12 +32,21 @@ jobs:
 
       - name: Check formatting
         run: |
-          find apps include src tests -type f \( -name '*.cpp' -o -name '*.hpp' -o -name '*.in' \) -print0 \
-            | xargs -0 .venv/bin/clang-format --dry-run --Werror
+          find apps include src tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 \
+            | xargs -0 clang-format --dry-run --Werror
 
       - name: Run cpplint
-        run: .venv/bin/python -m cpplint --recursive apps include src tests
+        run: python3 -m cpplint --recursive apps include src tests
+
+      - name: Run clang-tidy
+        run: |
+          cmake -S . -B build/tidy -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_CXX_CLANG_TIDY=clang-tidy
+          cmake --build build/tidy --parallel
 
       - name: Check commit messages
         if: github.event_name == 'pull_request'
-        run: python3 scripts/check_commit_range.py "origin/${{ github.base_ref }}..HEAD"
+        run: .githooks/check-commit-range "origin/${{ github.base_ref }}..HEAD"

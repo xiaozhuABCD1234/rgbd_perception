@@ -1,7 +1,14 @@
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
-find_dependency(Threads)
+
+if(@RGBD_WITH_ORBBEC@)
+  find_dependency(OrbbecSDK)
+endif()
+
+if(@RGBD_WITH_REALSENSE@)
+  find_dependency(realsense2)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/rgbd_perceptionTargets.cmake")
 check_required_components(rgbd_perception)

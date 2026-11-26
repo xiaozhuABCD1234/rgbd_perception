@@ -8,7 +8,7 @@
   "configurePresets": [
     {
       "name": "dev",
-      "displayName": "Development (Debug)",
+      "displayName": "Development",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/dev",
       "cacheVariables": {
@@ -30,34 +30,76 @@
     },
     {
       "name": "asan",
-      "displayName": "Address/UndefinedBehavior Sanitizers",
+      "displayName": "ASan and UBSan",
       "inherits": "dev",
       "binaryDir": "${sourceDir}/build/asan",
       "cacheVariables": {
         "RGBD_ENABLE_SANITIZERS": "ON"
       }
+    },
+    {
+      "name": "gemini305",
+      "displayName": "Gemini 305",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/gemini305",
+      "cacheVariables": {
+        "RGBD_WITH_ORBBEC": "ON",
+        "OrbbecSDK_DIR": "${sourceDir}/build/_sdk/install/lib"
+      }
+    },
+    {
+      "name": "d435i",
+      "displayName": "D435i",
+      "inherits": "dev",
+      "binaryDir": "${sourceDir}/build/d435i",
+      "cacheVariables": {
+        "RGBD_WITH_REALSENSE": "ON"
+      }
     }
   ],
   "buildPresets": [
-    { "name": "dev", "configurePreset": "dev" },
-    { "name": "release", "configurePreset": "release" },
-    { "name": "asan", "configurePreset": "asan" }
+    {
+      "name": "dev",
+      "configurePreset": "dev"
+    },
+    {
+      "name": "release",
+      "configurePreset": "release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan"
+    },
+    {
+      "name": "gemini305",
+      "configurePreset": "gemini305"
+    },
+    {
+      "name": "d435i",
+      "configurePreset": "d435i"
+    }
   ],
   "testPresets": [
     {
       "name": "dev",
       "configurePreset": "dev",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "release",
       "configurePreset": "release",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     },
     {
       "name": "asan",
       "configurePreset": "asan",
-      "output": { "outputOnFailure": true }
+      "output": {
+        "outputOnFailure": true
+      }
     }
   ]
 }

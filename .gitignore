@@ -20,7 +20,9 @@ compile_commands.json
 .clangd/
 /output/
 /recordings/
+*.rgbd
 *.log
+/Log/
 .venv/
 __pycache__/
 *.py[cod]

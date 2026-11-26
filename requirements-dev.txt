@@ -1,2 +1,2 @@
-cpplint==2.0.2
-clang-format==18.1.8
+cpplint>=1.6.1
+clang-format>=18.0

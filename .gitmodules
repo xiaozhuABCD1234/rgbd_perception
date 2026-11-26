@@ -1,0 +1,9 @@
+[submodule "third_party/OrbbecSDK"]
+	path = third_party/OrbbecSDK
+	url = https://gitee.com/orbbecdeveloper/OrbbecSDK_v2.git
+[submodule "third_party/librealsense"]
+	path = third_party/librealsense
+	url = https://github.com/IntelRealSense/librealsense.git
+[submodule "third_party/mcap"]
+	path = third_party/mcap
+	url = https://github.com/foxglove/mcap.git

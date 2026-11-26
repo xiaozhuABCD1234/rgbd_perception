@@ -1,4 +1,6 @@
 ---
 Language: Cpp
 BasedOnStyle: Google
+ColumnLimit: 80
+FixNamespaceComments: false
 ...

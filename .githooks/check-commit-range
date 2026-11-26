@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HOOK_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$HOOK_DIR/lib.sh"
+
+if (( $# > 1 )); then
+    printf 'Usage: %s [RANGE]\n' "$0" >&2
+    exit 2
+fi
+
+range=${1:-HEAD}
+commit_list=$(git log --format=%H --no-merges "$range")
+commits=()
+if [[ -n $commit_list ]]; then
+    mapfile -t commits <<< "$commit_list"
+fi
+
+if (( ${#commits[@]} == 0 )); then
+    printf 'No commits to check in %s\n' "$range"
+    exit 0
+fi
+
+failed=0
+for commit in "${commits[@]}"; do
+    message=$(git show -s --format=%B "$commit")
+    validate_commit_message "$message"
+    if (( ${#COMMIT_MESSAGE_ERRORS[@]} > 0 )); then
+        failed=$((failed + 1))
+        printf 'Invalid commit %.12s:\n' "$commit" >&2
+        print_commit_message_errors
+    fi
+done
+
+if (( failed > 0 )); then
+    printf '%d/%d commits failed validation\n' "$failed" "${#commits[@]}" >&2
+    exit 1
+fi
+
+printf 'Validated %d commit(s)\n' "${#commits[@]}"

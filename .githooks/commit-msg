@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
-exec python3 "$ROOT/scripts/check_commit_message.py" "$1"
+HOOK_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+source "$HOOK_DIR/lib.sh"
+
+if (( $# != 1 )) || [[ ! -f ${1:-} ]]; then
+    printf 'Usage: %s COMMIT_MESSAGE_FILE\n' "$0" >&2
+    exit 2
+fi
+
+message=$(<"$1")
+validate_commit_message "$message"
+if (( ${#COMMIT_MESSAGE_ERRORS[@]} > 0 )); then
+    printf 'Invalid commit message:\n' >&2
+    print_commit_message_errors
+    printf 'Example: feat(camera): add Gemini 305 capture adapter\n' >&2
+    exit 1
+fi
