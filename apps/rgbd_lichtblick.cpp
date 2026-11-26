@@ -3,10 +3,12 @@
 #include <cstddef>
 #include <exception>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
 #include "rgbd/cameras/factory.hpp"
+#include "rgbd/io/lichtblick_server.hpp"
 #include "rgbd/io/mcap_image_writer.hpp"
 #include "rgbd/version.hpp"
 
@@ -21,8 +23,9 @@ void HandleSignal(int) { g_stop = 1; }
 
 struct Options {
   std::string camera_uri = "gemini305://?width=640&height=480&fps=30";
-  std::string output = "rgbd_lichtblick.mcap";
+  std::string output;
   int frames = 0;
+  int port = 8765;
 };
 
 int ParsePositiveInt(const std::string& value, const char* name) {
@@ -56,6 +59,11 @@ Options ParseOptions(int argc, char** argv) {
         throw std::invalid_argument("--frames requires a value");
       }
       options.frames = ParsePositiveInt(argv[index], "--frames");
+    } else if (argument == "--port") {
+      if (++index >= argc) {
+        throw std::invalid_argument("--port requires a value");
+      }
+      options.port = ParsePositiveInt(argv[index], "--port");
     } else {
       throw std::invalid_argument("unknown argument: " + argument);
     }
@@ -69,16 +77,25 @@ int main(int argc, char** argv) {
   try {
     const Options options = ParseOptions(argc, argv);
     auto camera = rgbd::CreateCameraFromUri(options.camera_uri);
-    rgbd::McapImageWriterConfig writer_config;
-    writer_config.path = options.output;
-    rgbd::McapImageWriter writer(writer_config);
+    rgbd::LichtblickServerConfig server_config;
+    server_config.port = options.port;
+    rgbd::LichtblickServer server(server_config);
+    std::unique_ptr<rgbd::McapImageWriter> writer;
+    if (!options.output.empty()) {
+      rgbd::McapImageWriterConfig writer_config;
+      writer_config.path = options.output;
+      writer = std::make_unique<rgbd::McapImageWriter>(writer_config);
+    }
 
     std::signal(SIGINT, HandleSignal);
     std::signal(SIGTERM, HandleSignal);
 
     std::cout << "rgbd_perception " << rgbd::kVersion << '\n';
-    std::cout << "recording " << options.output << '\n';
-    std::cout << "open the file in Lichtblick after the capture stops\n";
+    std::cout << "Lichtblick: " << server.Url() << '\n';
+    if (writer != nullptr) {
+      std::cout << "recording: " << options.output << '\n';
+    }
+    server.Start();
     camera->Open();
     camera->Start();
     std::cout << "camera=" << camera->Name() << '\n';
@@ -92,7 +109,10 @@ int main(int argc, char** argv) {
         }
         throw std::runtime_error("failed to read camera frame");
       }
-      writer.Write(frame);
+      server.Publish(frame);
+      if (writer != nullptr) {
+        writer->Write(frame);
+      }
       ++received;
       if (received % kReportEvery == 0) {
         std::cout << "frames=" << received << " sequence=" << frame.sequence
@@ -102,9 +122,13 @@ int main(int argc, char** argv) {
 
     camera->Stop();
     camera->Close();
-    writer.Close();
-    std::cout << "saved=" << options.output << " frames=" << writer.FrameCount()
-              << '\n';
+    server.Stop();
+    if (writer != nullptr) {
+      writer->Close();
+      std::cout << "saved=" << options.output
+                << " frames=" << writer->FrameCount() << '\n';
+    }
+    std::cout << "frames=" << received << '\n';
     return received > 0 ? 0 : 1;
   } catch (const std::exception& error) {
     std::cerr << "error: " << error.what() << '\n';

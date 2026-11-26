@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            cmake ninja-build g++ clang-format clang-tidy cpplint
+            cmake ninja-build g++ clang-format clang-tidy cpplint libwebsockets-dev nlohmann-json3-dev
 
       - name: Configure
         run: cmake --preset dev

@@ -109,6 +109,15 @@ if(RGBD_WITH_MCAP)
     message(WARNING "third_party/mcap is not initialized; RGBD_WITH_MCAP is disabled")
   else()
     find_package(Protobuf REQUIRED)
+    find_package(nlohmann_json REQUIRED)
+    find_package(libwebsockets CONFIG REQUIRED)
+    if(TARGET websockets_shared)
+      set(RGBD_WEBSOCKETS_TARGET websockets_shared)
+    elseif(TARGET websockets)
+      set(RGBD_WEBSOCKETS_TARGET websockets)
+    else()
+      message(FATAL_ERROR "libwebsockets target not found")
+    endif()
     set(RGBD_PROTO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/proto")
     set(RGBD_PROTO_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated/proto")
     set(RGBD_PROTO_FILES
@@ -139,6 +148,8 @@ if(RGBD_WITH_MCAP)
     target_link_libraries(rgbd_mcap_proto PRIVATE protobuf::libprotobuf)
 
     add_library(rgbd_mcap
+      src/io/foxglove_messages.cpp
+      src/io/lichtblick_server.cpp
       src/io/mcap_implementation.cpp
       src/io/mcap_image_writer.cpp
       $<TARGET_OBJECTS:rgbd_mcap_proto>)
@@ -155,9 +166,13 @@ if(RGBD_WITH_MCAP)
     target_compile_definitions(rgbd_mcap PRIVATE
       MCAP_COMPRESSION_NO_ZSTD
       MCAP_COMPRESSION_NO_LZ4)
-    target_link_libraries(rgbd_mcap PUBLIC
-      rgbd::io
-      protobuf::libprotobuf)
+    target_link_libraries(rgbd_mcap
+      PUBLIC
+        rgbd::io
+        protobuf::libprotobuf
+      PRIVATE
+        nlohmann_json::nlohmann_json
+        ${RGBD_WEBSOCKETS_TARGET})
     list(APPEND RGBD_APPS rgbd_lichtblick)
     set(RGBD_MCAP_ENABLED ON)
   endif()

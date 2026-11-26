@@ -4,6 +4,8 @@ include(CMakeFindDependencyMacro)
 
 if(@RGBD_MCAP_ENABLED@)
   find_dependency(Protobuf)
+  find_dependency(nlohmann_json)
+  find_dependency(libwebsockets CONFIG)
 endif()
 
 if(@RGBD_WITH_ORBBEC@)

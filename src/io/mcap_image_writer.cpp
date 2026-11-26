@@ -1,14 +1,10 @@
 #include "rgbd/io/mcap_image_writer.hpp"
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/descriptor.pb.h>
-
 #include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -16,37 +12,11 @@
 
 #include <mcap/writer.hpp>
 
-#include "foxglove/CameraCalibration.pb.h"
-#include "foxglove/RawImage.pb.h"
+#include "foxglove_messages.hpp"
 
 namespace rgbd {
 
 namespace {
-
-void AddFileDescriptor(const google::protobuf::FileDescriptor* file,
-                       std::set<std::string>* added,
-                       google::protobuf::FileDescriptorSet* set) {
-  if (file == nullptr || added->count(file->name()) != 0) {
-    return;
-  }
-  added->insert(file->name());
-  for (int index = 0; index < file->dependency_count(); ++index) {
-    AddFileDescriptor(file->dependency(index), added, set);
-  }
-  google::protobuf::FileDescriptorProto* proto = set->add_file();
-  file->CopyTo(proto);
-}
-
-std::string DescriptorSet(const google::protobuf::Descriptor* descriptor) {
-  google::protobuf::FileDescriptorSet set;
-  std::set<std::string> added;
-  AddFileDescriptor(descriptor->file(), &added, &set);
-  std::string serialized;
-  if (!set.SerializeToString(&serialized)) {
-    throw std::runtime_error("failed to serialize protobuf descriptor set");
-  }
-  return serialized;
-}
 
 void EnsureStatus(const mcap::Status& status) {
   if (status.code != mcap::StatusCode::Success) {
@@ -60,18 +30,6 @@ std::int64_t NowNs() {
       .count();
 }
 
-void SetTimestamp(std::int64_t nanoseconds,
-                  google::protobuf::Timestamp* timestamp) {
-  std::int64_t seconds = nanoseconds / 1000000000;
-  std::int64_t nanos = nanoseconds % 1000000000;
-  if (nanos < 0) {
-    nanos += 1000000000;
-    --seconds;
-  }
-  timestamp->set_seconds(seconds);
-  timestamp->set_nanos(static_cast<std::int32_t>(nanos));
-}
-
 }
 
 class McapImageWriter::Impl {
@@ -81,14 +39,13 @@ class McapImageWriter::Impl {
     if (config.path.empty()) {
       throw std::invalid_argument("MCAP path must not be empty");
     }
-    raw_descriptor_data = DescriptorSet(foxglove::RawImage::descriptor());
+    raw_descriptor_data = internal::FoxgloveRawImageDescriptor();
     calibration_descriptor_data =
-        DescriptorSet(foxglove::CameraCalibration::descriptor());
-    raw_schema = mcap::Schema(foxglove::RawImage::descriptor()->full_name(),
-                              "protobuf", raw_descriptor_data);
-    calibration_schema =
-        mcap::Schema(foxglove::CameraCalibration::descriptor()->full_name(),
-                     "protobuf", calibration_descriptor_data);
+        internal::FoxgloveCameraCalibrationDescriptor();
+    raw_schema =
+        mcap::Schema("foxglove.RawImage", "protobuf", raw_descriptor_data);
+    calibration_schema = mcap::Schema("foxglove.CameraCalibration", "protobuf",
+                                      calibration_descriptor_data);
     mcap::McapWriterOptions options("rgbd_perception");
     options.noChunking = true;
     options.compression = mcap::Compression::None;
@@ -118,10 +75,12 @@ class McapImageWriter::Impl {
       throw std::invalid_argument("cannot write an invalid frame");
     }
     const std::int64_t timestamp = NowNs();
-    WriteImage(
-        frame, timestamp, color_channel.id, "rgb8",
+    const std::string color_payload = internal::SerializeFoxgloveRawImage(
+        frame, timestamp, config.frame_id, "rgb8",
         static_cast<std::uint32_t>(frame.color.width * ColorImage::channels),
         frame.color.pixels.data(), frame.color.pixels.size());
+    WriteMessage(color_channel.id, frame.sequence, timestamp, color_payload);
+
     std::vector<std::uint16_t> depth_mm(frame.depth.values.size());
     for (std::size_t index = 0; index < frame.depth.values.size(); ++index) {
       const float meters = frame.depth.values[index];
@@ -135,14 +94,17 @@ class McapImageWriter::Impl {
       }
       depth_mm[index] = value;
     }
-    WriteImage(
-        frame, timestamp, depth_channel.id, "mono16",
+    const std::string depth_payload = internal::SerializeFoxgloveRawImage(
+        frame, timestamp, config.frame_id, "mono16",
         static_cast<std::uint32_t>(frame.depth.width * sizeof(std::uint16_t)),
         depth_mm.data(), depth_mm.size() * sizeof(std::uint16_t));
-    if (!calibration_written) {
-      WriteCalibration(frame, timestamp);
-      calibration_written = true;
-    }
+    WriteMessage(depth_channel.id, frame.sequence, timestamp, depth_payload);
+
+    const std::string calibration_payload =
+        internal::SerializeFoxgloveCameraCalibration(frame, timestamp,
+                                                     config.frame_id);
+    WriteMessage(calibration_channel.id, frame.sequence, timestamp,
+                 calibration_payload);
     ++frame_count;
   }
 
@@ -153,61 +115,8 @@ class McapImageWriter::Impl {
     }
   }
 
-  void WriteImage(const FrameSet& frame, std::int64_t timestamp,
-                  mcap::ChannelId channel_id, const std::string& encoding,
-                  std::uint32_t step, const void* data, std::size_t size) {
-    foxglove::RawImage image;
-    SetTimestamp(timestamp, image.mutable_timestamp());
-    image.set_frame_id(config.frame_id);
-    image.set_width(static_cast<std::uint32_t>(frame.color.width));
-    image.set_height(static_cast<std::uint32_t>(frame.color.height));
-    image.set_encoding(encoding);
-    image.set_step(step);
-    image.set_data(data, size);
-    WriteMessage(channel_id, frame.sequence, timestamp, image);
-  }
-
-  void WriteCalibration(const FrameSet& frame, std::int64_t timestamp) {
-    foxglove::CameraCalibration calibration;
-    SetTimestamp(timestamp, calibration.mutable_timestamp());
-    calibration.set_frame_id(config.frame_id);
-    calibration.set_width(static_cast<std::uint32_t>(frame.color.width));
-    calibration.set_height(static_cast<std::uint32_t>(frame.color.height));
-    calibration.set_distortion_model("plumb_bob");
-    calibration.add_d(0.0);
-    calibration.add_d(0.0);
-    calibration.add_d(0.0);
-    calibration.add_d(0.0);
-    calibration.add_d(0.0);
-    const CameraIntrinsics& intrinsics = frame.color_intrinsics;
-    for (const double value :
-         {static_cast<double>(intrinsics.fx), 0.0,
-          static_cast<double>(intrinsics.cx), 0.0,
-          static_cast<double>(intrinsics.fy),
-          static_cast<double>(intrinsics.cy), 0.0, 0.0, 1.0}) {
-      calibration.add_k(value);
-    }
-    for (const double value : {1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0}) {
-      calibration.add_r(value);
-    }
-    for (const double value :
-         {static_cast<double>(intrinsics.fx), 0.0,
-          static_cast<double>(intrinsics.cx), 0.0, 0.0,
-          static_cast<double>(intrinsics.fy),
-          static_cast<double>(intrinsics.cy), 0.0, 0.0, 0.0, 1.0, 0.0}) {
-      calibration.add_p(value);
-    }
-    WriteMessage(calibration_channel.id, frame.sequence, timestamp,
-                 calibration);
-  }
-
-  template <typename Message>
   void WriteMessage(mcap::ChannelId channel_id, std::uint64_t sequence,
-                    std::int64_t timestamp, const Message& message) {
-    std::string payload;
-    if (!message.SerializeToString(&payload)) {
-      throw std::runtime_error("failed to serialize Foxglove message");
-    }
+                    std::int64_t timestamp, const std::string& payload) {
     mcap::Message record;
     record.channelId = channel_id;
     record.sequence = static_cast<std::uint32_t>(sequence);
@@ -227,7 +136,6 @@ class McapImageWriter::Impl {
   mcap::Channel color_channel;
   mcap::Channel depth_channel;
   mcap::Channel calibration_channel;
-  bool calibration_written = false;
   bool open = true;
   std::size_t frame_count = 0;
 };

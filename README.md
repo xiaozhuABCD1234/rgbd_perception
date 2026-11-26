@@ -40,7 +40,7 @@ cameras/realsense -> core
 - clang-format
 - 可选：Orbbec SDK v2
 - 可选：librealsense2
-- 可选：MCAP 子模块与 Protobuf，用于 Lichtblick 输出
+- 可选：MCAP 子模块、Protobuf、nlohmann-json、libwebsockets，用于 Lichtblick 输出
 
 ## 构建
 
@@ -92,14 +92,19 @@ rgbd_replay build/demo.rgbd
 
 ### Gemini 305 + Lichtblick
 
-`rgbd_lichtblick` 从 Gemini 305 采集 RGB-D 并输出 Lichtblick 可打开的 MCAP 文件：
+`rgbd_lichtblick` 从 Gemini 305 采集 RGB-D 并实时发布到 Lichtblick WebSocket：
 
 ```bash
 just gemini305-lichtblick
-rgbd_lichtblick --frames 300 --output gemini305.mcap
 ```
 
-停止采集后在 Lichtblick 中打开 `gemini305.mcap`，图像话题为：
+默认地址：
+
+```text
+ws://localhost:8765
+```
+
+在 Lichtblick 中选择打开连接，数据源选择 Foxglove WebSocket，填入该地址。图像话题：
 
 ```text
 /camera/color/image_raw
@@ -107,7 +112,15 @@ rgbd_lichtblick --frames 300 --output gemini305.mcap
 /camera/color/camera_info
 ```
 
-彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。MCAP 写入器位于 `rgbd/io`，不依赖 ROS。
+彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。按 `Ctrl+C` 停止。
+
+修改端口或同时录制 MCAP：
+
+```bash
+just gemini305-lichtblick -- --port 9000 --output gemini305.mcap
+```
+
+MCAP 写入器位于 `rgbd/io`，不依赖 ROS。
 
 ## 识别与三维定位
 
