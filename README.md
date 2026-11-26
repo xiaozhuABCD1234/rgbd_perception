@@ -73,7 +73,13 @@ just d435i
 
 ## 官方 YOLO26 模型
 
-Ultralytics 在 `v8.4.0` Release 中提供官方 ONNX 权重，可直接被本项目的 OpenVINO 后端加载：
+Ultralytics 在 `v8.4.0` Release 中提供官方 ONNX 权重，可直接被本项目的 OpenVINO 后端加载。推荐使用内置 recipe：
+
+```bash
+just download-models
+```
+
+也可以手动下载：
 
 ```bash
 mkdir -p models
@@ -146,7 +152,21 @@ rgbd_replay build/session.rgbd
 `rgbd_lichtblick` 从 Gemini 305 采集 RGB-D 并实时发布到 Lichtblick WebSocket：
 
 ```bash
+just download-models
 just gemini305-lichtblick
+```
+
+默认使用 `models/yolo26n-seg.onnx`、`config/coco.txt` 和 `GPU`，可通过 just 变量覆盖：
+
+```bash
+just gemini305-lichtblick device=CPU
+just gemini305-lichtblick model=models/yolo26n.onnx
+```
+
+桌面调试可使用：
+
+```bash
+just viewer-yolo
 ```
 
 默认地址：

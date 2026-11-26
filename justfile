@@ -2,6 +2,10 @@ set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 default: check
 
+model := "models/yolo26n-seg.onnx"
+labels := "config/coco.txt"
+device := "GPU"
+
 configure:
     cmake --preset dev
 
@@ -32,6 +36,10 @@ test: build
 
 viewer *args: build
     ./build/dev/rgbd_viewer {{args}}
+
+viewer-yolo *args: build download-models
+    ./build/dev/rgbd_viewer \
+        --model "{{model}}" --labels "{{labels}}" --device "{{device}}" {{args}}
 
 replay *args: build
     ./build/dev/rgbd_replay {{args}}
@@ -83,10 +91,30 @@ submodules:
         git submodule add -f https://github.com/foxglove/mcap.git third_party/mcap
     fi
 
-gemini305 *args: sdk
+gemini305 *args: sdk download-models
     cmake --preset gemini305
     cmake --build --preset gemini305 --parallel
-    ./build/gemini305/rgbd_viewer {{args}}
+    ./build/gemini305/rgbd_viewer \
+        --model "{{model}}" --labels "{{labels}}" --device "{{device}}" {{args}}
+
+download-models:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p models
+    base="${YOLO26_ASSET_BASE:-https://github.com/ultralytics/assets/releases/download/v8.4.0}"
+    for name in yolo26n-seg.onnx yolo26n.onnx; do
+        path="models/$name"
+        if [[ -s "$path" ]]; then
+            echo "exists: $path"
+            continue
+        fi
+        if ! curl -L --fail --retry 3 -o "$path.tmp" "$base/$name"; then
+            echo "official asset download failed, retrying through GitHub proxy" >&2
+            curl -L --fail --retry 3 -o "$path.tmp" "https://gh-proxy.com/$base/$name"
+        fi
+        mv "$path.tmp" "$path"
+    done
+    ls -lh models/*.onnx
 
 lichtblick-setup:
     #!/usr/bin/env bash
@@ -105,11 +133,12 @@ lichtblick-setup:
     tar -xzf data/lichtblick-web.tar.gz -C data/lichtblick-web
     rm data/lichtblick-web.tar.gz
 
-gemini305-lichtblick *args: sdk lichtblick-setup
+gemini305-lichtblick *args: sdk lichtblick-setup download-models
     git submodule update --init --depth 1 -- third_party/mcap
     cmake --preset gemini305
     cmake --build --preset gemini305 --parallel
-    ./build/gemini305/rgbd_lichtblick {{args}}
+    ./build/gemini305/rgbd_lichtblick \
+        --model "{{model}}" --labels "{{labels}}" --device "{{device}}" {{args}}
 
 d435i uri="d435i://?width=640&height=480&fps=30" *args:
     #!/usr/bin/env bash
