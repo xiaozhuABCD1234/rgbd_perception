@@ -16,7 +16,6 @@
 namespace {
 
 constexpr int kTimeoutMs = 1000;
-constexpr int kReportEvery = 30;
 
 volatile std::sig_atomic_t g_stop = 0;
 
@@ -134,10 +133,6 @@ int main(int argc, char** argv) {
         writer->Write(frame);
       }
       ++received;
-      if (received % kReportEvery == 0) {
-        std::cout << "frames=" << received << " sequence=" << frame.sequence
-                  << '\n';
-      }
     }
 
     camera->Stop();
@@ -149,7 +144,6 @@ int main(int argc, char** argv) {
       std::cout << "saved=" << options.output
                 << " frames=" << writer->FrameCount() << '\n';
     }
-    std::cout << "frames=" << received << '\n';
     return received > 0 ? 0 : 1;
   } catch (const std::exception& error) {
     std::cerr << "error: " << error.what() << '\n';
