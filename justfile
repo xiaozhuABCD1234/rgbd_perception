@@ -9,6 +9,10 @@ sdk:
     #!/usr/bin/env bash
     set -euo pipefail
     git submodule update --init -- third_party/OrbbecSDK
+    sdk_home="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' build/_sdk/src/CMakeCache.txt 2>/dev/null || true)"
+    if [[ -n "$sdk_home" && "$sdk_home" != "$PWD/third_party/OrbbecSDK" ]]; then
+        rm -rf build/_sdk/src
+    fi
     cmake -S third_party/OrbbecSDK -B build/_sdk/src -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DOB_BUILD_EXAMPLES=OFF \
