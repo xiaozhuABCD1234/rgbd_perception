@@ -12,6 +12,8 @@ camera:
     gain: 16
     disparity_search_range: 128
     ae_max_exposure_us: 30158
+    min_depth_m: 0.04
+    max_depth_m: 1.0
   color:
     width: 848
     height: 530

@@ -31,6 +31,8 @@ struct CameraDepthControlConfig {
   int gain = 16;
   int disparity_search_range = 128;
   int ae_max_exposure_us = 30158;
+  float min_depth_m = 0.04F;
+  float max_depth_m = 1.0F;
 };
 
 struct CameraConfig {

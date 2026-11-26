@@ -103,8 +103,9 @@ int main(int argc, char** argv) {
                       : rgbd::CreateCameraFromUri(options.camera_uri);
     rgbd::CenterBoxRecognizer recognizer(
         rgbd::CenterBoxRecognizerConfig{"object", 0.5F, 1.0F});
-    rgbd::RobustDepthFusionEstimator depth_estimator(
-        rgbd::DepthFusionConfig{0.75F, 5, 0.04F, 1.0F, 3.0F});
+    rgbd::RobustDepthFusionEstimator depth_estimator(rgbd::DepthFusionConfig{
+        0.75F, 5, options.camera.depth_control.min_depth_m,
+        options.camera.depth_control.max_depth_m, 3.0F});
     rgbd::PerceptionPipeline pipeline(recognizer, depth_estimator);
     std::unique_ptr<rgbd::RecordingWriter> recorder;
     if (!options.recording_path.empty()) {

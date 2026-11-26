@@ -2,6 +2,8 @@
 #define APPS_APP_SUPPORT_HPP_
 
 #include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 
@@ -95,6 +97,14 @@ inline CameraOptions LoadCameraOptions(const Config& config) {
   camera.depth_control.ae_max_exposure_us =
       LoadPositiveInt(config, "camera.depth.ae_max_exposure_us",
                       camera.depth_control.ae_max_exposure_us);
+  camera.depth_control.min_depth_m = config.GetFloat(
+      "camera.depth.min_depth_m", camera.depth_control.min_depth_m);
+  camera.depth_control.max_depth_m = config.GetFloat(
+      "camera.depth.max_depth_m", camera.depth_control.max_depth_m);
+  if (camera.depth_control.min_depth_m <= 0.0F ||
+      camera.depth_control.max_depth_m <= camera.depth_control.min_depth_m) {
+    throw std::invalid_argument("camera depth range is invalid");
+  }
   camera.color.width = static_cast<std::size_t>(LoadPositiveInt(
       config, "camera.color.width", static_cast<int>(camera.color.width)));
   camera.color.height = static_cast<std::size_t>(LoadPositiveInt(
@@ -119,6 +129,12 @@ inline CameraOptions LoadCameraOptions(const Config& config) {
   return options;
 }
 
+inline std::string FormatMetres(float value) {
+  std::ostringstream stream;
+  stream << std::fixed << std::setprecision(3) << value;
+  return stream.str();
+}
+
 inline std::string DescribeCamera(const CameraConfig& camera) {
   return camera.backend + " depth=" + std::to_string(camera.depth.width) + "x" +
          std::to_string(camera.depth.height) + "@" +
@@ -132,7 +148,9 @@ inline std::string DescribeCamera(const CameraConfig& camera) {
               ? "auto"
               : std::to_string(camera.depth_control.exposure_us) + "us") +
          " gain=" + std::to_string(camera.depth_control.gain) + " disparity=" +
-         std::to_string(camera.depth_control.disparity_search_range);
+         std::to_string(camera.depth_control.disparity_search_range) +
+         " range=" + FormatMetres(camera.depth_control.min_depth_m) + "-" +
+         FormatMetres(camera.depth_control.max_depth_m) + "m";
 }
 
 }  // namespace app
