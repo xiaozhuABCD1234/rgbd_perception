@@ -85,6 +85,8 @@ std::string ChannelJson(std::uint64_t id, const std::string& topic,
 struct Outgoing {
   bool binary = false;
   std::vector<unsigned char> data;
+  std::uint64_t channel_id = 0;
+  std::uint32_t subscription_id = 0;
 };
 
 struct SessionState {
@@ -202,6 +204,12 @@ class LichtblickServer::Impl {
     if (!frame.Valid()) {
       throw std::invalid_argument("cannot publish an invalid frame");
     }
+    {
+      std::lock_guard<std::mutex> lock(mutex);
+      if (sessions.empty()) {
+        return;
+      }
+    }
     const std::int64_t timestamp = NowNs();
     const std::string color_payload = internal::SerializeFoxgloveRawImage(
         frame, timestamp, config.frame_id, "rgb8",
@@ -231,9 +239,6 @@ class LichtblickServer::Impl {
     bool queued = false;
     {
       std::lock_guard<std::mutex> lock(mutex);
-      if (sessions.empty()) {
-        return;
-      }
       for (SessionState* state : sessions) {
         QueueSubscriptions(state, kColorChannel, timestamp, color_payload);
         QueueSubscriptions(state, kDepthChannel, timestamp, depth_payload);
@@ -405,8 +410,18 @@ class LichtblickServer::Impl {
       return;
     }
     for (const std::uint32_t subscription_id : found->second) {
+      for (auto iterator = state->queue.begin();
+           iterator != state->queue.end();) {
+        if (iterator->binary && iterator->channel_id == channel_id &&
+            iterator->subscription_id == subscription_id) {
+          iterator = state->queue.erase(iterator);
+        } else {
+          ++iterator;
+        }
+      }
       state->queue.push_back(
-          {true, BinaryMessage(subscription_id, timestamp, payload)});
+          {true, BinaryMessage(subscription_id, timestamp, payload), channel_id,
+           subscription_id});
     }
   }
 

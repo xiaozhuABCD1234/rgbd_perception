@@ -44,6 +44,7 @@ void SetDepth(rgbd::FrameSet* frame, int left, int top, int width, int height,
 rgbd::ObjectGeometryConfig Config() {
   rgbd::ObjectGeometryConfig config;
   config.pixel_stride = 1;
+  config.max_samples = 100000;
   config.voxel_size_m = 0.02F;
   config.min_cluster_points = 20;
   config.min_depth_m = 0.1F;
@@ -145,4 +146,7 @@ RGBD_TEST(object_geometry_validates_config) {
   RGBD_CHECK_THROW(
       rgbd::DepthPointCloudGeometryEstimator({1, 0.02F, 20, 0.1F, 10.0F, 0.0F}),
       std::invalid_argument);
+  RGBD_CHECK_THROW(rgbd::DepthPointCloudGeometryEstimator(
+                       {1, 0.02F, 20, 0.1F, 10.0F, 0.01F, 0}),
+                   std::invalid_argument);
 }

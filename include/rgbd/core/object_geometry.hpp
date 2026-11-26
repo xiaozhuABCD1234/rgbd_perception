@@ -30,6 +30,7 @@ struct ObjectGeometryConfig {
   float min_depth_m = 0.1F;
   float max_depth_m = 10.0F;
   float min_box_size_m = 0.01F;
+  std::size_t max_samples = 2000;
 };
 
 class IObjectGeometryEstimator {

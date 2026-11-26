@@ -36,8 +36,6 @@ float Clamp(float value, float low, float high) {
   return std::max(low, std::min(value, high));
 }
 
-float Sigmoid(float value) { return 1.0F / (1.0F + std::exp(-value)); }
-
 float IoU(const RawDetection& first, const RawDetection& second) {
   const float left = std::max(first.x1, second.x1);
   const float top = std::max(first.y1, second.y1);
@@ -91,44 +89,56 @@ Letterbox PrepareInput(const FrameSet& frame, int input_width,
   const float pad_y =
       (static_cast<float>(input_height) - resized_height) / 2.0F;
   constexpr float kPadding = 114.0F / 255.0F;
-  std::vector<float> values(static_cast<std::size_t>(input_width) *
-                                static_cast<std::size_t>(input_height) * 3,
-                            kPadding);
-  const auto channel_offset = [input_width, input_height](int channel) {
-    return static_cast<std::size_t>(channel) *
-           static_cast<std::size_t>(input_width) *
-           static_cast<std::size_t>(input_height);
-  };
+  const std::size_t plane =
+      static_cast<std::size_t>(input_width) * input_height;
+  std::vector<float> values(plane * 3, kPadding);
+
+  std::vector<int> source_x(resized_width);
+  std::vector<int> source_x_next(resized_width);
+  std::vector<float> weight_x(resized_width);
+  for (int x = 0; x < resized_width; ++x) {
+    const float position = Clamp((static_cast<float>(x) + 0.5F) / scale - 0.5F,
+                                 0.0F, source_width - 1.0F);
+    const int first = static_cast<int>(std::floor(position));
+    source_x[x] = first;
+    source_x_next[x] = std::min(first + 1, static_cast<int>(source_width) - 1);
+    weight_x[x] = position - static_cast<float>(first);
+  }
+
+  const std::uint8_t* pixels = frame.color.pixels.data();
+  const float inverse_255 = 1.0F / 255.0F;
+  const int target_pad_x = static_cast<int>(std::round(pad_x));
+  const int target_pad_y = static_cast<int>(std::round(pad_y));
   for (int y = 0; y < resized_height; ++y) {
     const float source_y = Clamp((static_cast<float>(y) + 0.5F) / scale - 0.5F,
                                  0.0F, source_height - 1.0F);
     const int y0 = static_cast<int>(std::floor(source_y));
     const int y1 = std::min(y0 + 1, static_cast<int>(source_height) - 1);
     const float wy = source_y - static_cast<float>(y0);
+    const std::size_t row0 =
+        static_cast<std::size_t>(y0) * frame.color.width * 3;
+    const std::size_t row1 =
+        static_cast<std::size_t>(y1) * frame.color.width * 3;
+    const std::size_t target_row =
+        static_cast<std::size_t>(target_pad_y + y) * input_width;
     for (int x = 0; x < resized_width; ++x) {
-      const float source_x =
-          Clamp((static_cast<float>(x) + 0.5F) / scale - 0.5F, 0.0F,
-                source_width - 1.0F);
-      const int x0 = static_cast<int>(std::floor(source_x));
-      const int x1 = std::min(x0 + 1, static_cast<int>(source_width) - 1);
-      const float wx = source_x - static_cast<float>(x0);
-      const int target_x = static_cast<int>(std::round(pad_x)) + x;
-      const int target_y = static_cast<int>(std::round(pad_y)) + y;
+      const int x0 = source_x[x];
+      const int x1 = source_x_next[x];
+      const float wx = weight_x[x];
+      const std::uint8_t* top_left = pixels + row0 + x0 * 3;
+      const std::uint8_t* top_right = pixels + row0 + x1 * 3;
+      const std::uint8_t* bottom_left = pixels + row1 + x0 * 3;
+      const std::uint8_t* bottom_right = pixels + row1 + x1 * 3;
       const std::size_t target_offset =
-          static_cast<std::size_t>(target_y) * input_width + target_x;
-      for (int channel = 0; channel < 3; ++channel) {
-        const auto sample = [&](int sx, int sy) {
-          return static_cast<float>(
-                     frame.color.pixels[(static_cast<std::size_t>(sy) *
-                                             frame.color.width +
-                                         static_cast<std::size_t>(sx)) *
-                                            ColorImage::channels +
-                                        channel]) /
-                 255.0F;
-        };
-        const float top = sample(x0, y0) * (1.0F - wx) + sample(x1, y0) * wx;
-        const float bottom = sample(x0, y1) * (1.0F - wx) + sample(x1, y1) * wx;
-        values[channel_offset(channel) + target_offset] =
+          target_row + static_cast<std::size_t>(target_pad_x + x);
+      for (std::size_t channel = 0; channel < 3; ++channel) {
+        const float top =
+            (top_left[channel] * (1.0F - wx) + top_right[channel] * wx) *
+            inverse_255;
+        const float bottom =
+            (bottom_left[channel] * (1.0F - wx) + bottom_right[channel] * wx) *
+            inverse_255;
+        values[channel * plane + target_offset] =
             top * (1.0F - wy) + bottom * wy;
       }
     }
@@ -184,6 +194,11 @@ class Yolo26Recognizer::Impl {
         Decode(*detection_tensor, prototype_tensor);
     detections = Nms(std::move(detections), settings.iou_threshold);
 
+    std::vector<float> prototype_values;
+    if (prototype_tensor != nullptr) {
+      prototype_values = prototype_tensor->AsFloat32();
+    }
+
     std::vector<Detection2D> results;
     results.reserve(detections.size());
     for (const RawDetection& detection : detections) {
@@ -207,8 +222,9 @@ class Yolo26Recognizer::Impl {
       result.confidence = detection.score;
       result.box = {left, top, right - left, bottom - top};
       if (prototype_tensor != nullptr && !detection.mask_coefficients.empty()) {
-        result.mask = DecodeMask(frame, *prototype_tensor, detection,
-                                 input.scale, input.pad_x, input.pad_y);
+        result.mask = DecodeMask(frame, *prototype_tensor, prototype_values,
+                                 detection, input.scale, input.pad_x,
+                                 input.pad_y, left, top, right, bottom);
       }
       results.push_back(std::move(result));
     }
@@ -306,8 +322,10 @@ class Yolo26Recognizer::Impl {
   }
 
   Mask2D DecodeMask(const FrameSet& frame, const Tensor& prototype,
+                    const std::vector<float>& values,
                     const RawDetection& detection, float scale, float pad_x,
-                    float pad_y) const {
+                    float pad_y, int left, int top, int right,
+                    int bottom) const {
     const auto& shape = prototype.Shape();
     if (shape.size() != 4) {
       return {};
@@ -316,40 +334,63 @@ class Yolo26Recognizer::Impl {
     const int proto_height = static_cast<int>(shape[2]);
     const int proto_width = static_cast<int>(shape[3]);
     if (detection.mask_coefficients.size() <
-        static_cast<std::size_t>(channels)) {
+            static_cast<std::size_t>(channels) ||
+        values.size() != static_cast<std::size_t>(channels) *
+                             static_cast<std::size_t>(proto_height) *
+                             static_cast<std::size_t>(proto_width)) {
       return {};
     }
-    const std::vector<float> values = prototype.AsFloat32();
+    const float frame_scale = std::max(scale, 1e-6F);
+    const float pixels_per_proto = frame_scale *
+                                   static_cast<float>(settings.input_width) /
+                                   static_cast<float>(proto_width);
+    const std::size_t max_stride =
+        std::min(frame.color.width, frame.color.height);
+    std::size_t mask_stride =
+        static_cast<std::size_t>(std::max(1.0F, std::ceil(pixels_per_proto)));
+    mask_stride = std::max<std::size_t>(1, std::min(mask_stride, max_stride));
     Mask2D mask;
     mask.width = frame.color.width;
     mask.height = frame.color.height;
-    mask.values.assign(mask.width * mask.height, 0);
+    mask.stride = mask_stride;
+    mask.values.assign(mask.StrideWidth() * mask.StrideHeight(), 0);
+    const std::size_t stride_width = mask.StrideWidth();
     const float width_ratio =
         static_cast<float>(proto_width) / settings.input_width;
     const float height_ratio =
         static_cast<float>(proto_height) / settings.input_height;
-    for (std::size_t y = 0; y < mask.height; ++y) {
+    const float logit_threshold =
+        std::log(settings.mask_threshold /
+                 std::max(1.0F - settings.mask_threshold, 1e-6F));
+    const std::size_t channel_stride =
+        static_cast<std::size_t>(proto_height) * proto_width;
+    const float* coefficients = detection.mask_coefficients.data();
+    const int stride = static_cast<int>(mask_stride);
+    for (int y = top; y < bottom; y += stride) {
       const float input_y = static_cast<float>(y) * scale + pad_y;
       const int proto_y = static_cast<int>(input_y * height_ratio);
       if (proto_y < 0 || proto_y >= proto_height) {
         continue;
       }
-      for (std::size_t x = 0; x < mask.width; ++x) {
+      const float* proto_row =
+          values.data() + static_cast<std::size_t>(proto_y) * proto_width;
+      const std::size_t mask_row =
+          static_cast<std::size_t>(y / stride) * stride_width;
+      for (int x = left; x < right; x += stride) {
         const float input_x = static_cast<float>(x) * scale + pad_x;
         const int proto_x = static_cast<int>(input_x * width_ratio);
         if (proto_x < 0 || proto_x >= proto_width) {
           continue;
         }
+        const float* proto_pixel = proto_row + proto_x;
         float logit = 0.0F;
         for (int channel = 0; channel < channels; ++channel) {
-          logit += detection.mask_coefficients[channel] *
-                   values[(static_cast<std::size_t>(channel) * proto_height +
-                           proto_y) *
-                              proto_width +
-                          proto_x];
+          logit +=
+              coefficients[channel] *
+              proto_pixel[static_cast<std::size_t>(channel) * channel_stride];
         }
-        if (Sigmoid(logit) >= settings.mask_threshold) {
-          mask.values[y * mask.width + x] = 255;
+        if (logit >= logit_threshold) {
+          mask.values[mask_row + static_cast<std::size_t>(x / stride)] = 255;
         }
       }
     }

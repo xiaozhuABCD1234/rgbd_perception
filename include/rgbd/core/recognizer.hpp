@@ -21,12 +21,23 @@ struct Rect {
 };
 
 struct Mask2D {
+  // width/height are in frame pixels; stride is the pixel size of each value.
   std::size_t width = 0;
   std::size_t height = 0;
   std::vector<std::uint8_t> values;
+  std::size_t stride = 1;
+
+  [[nodiscard]] std::size_t StrideWidth() const noexcept {
+    return stride == 0 ? 0 : (width + stride - 1) / stride;
+  }
+
+  [[nodiscard]] std::size_t StrideHeight() const noexcept {
+    return stride == 0 ? 0 : (height + stride - 1) / stride;
+  }
 
   [[nodiscard]] bool Valid() const noexcept {
-    return width > 0 && height > 0 && values.size() == width * height;
+    return width > 0 && height > 0 && stride > 0 &&
+           values.size() == StrideWidth() * StrideHeight();
   }
 };
 

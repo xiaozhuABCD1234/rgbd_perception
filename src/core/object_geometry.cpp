@@ -246,6 +246,7 @@ std::optional<ObjectGeometry> SelectLargestCluster(
     const VoxelMap& voxels, std::size_t min_cluster_points,
     float min_box_size) {
   std::unordered_map<VoxelKey, bool, VoxelKeyHash> visited;
+  visited.reserve(voxels.size());
   std::vector<Point3f> best_points;
   std::size_t best_count = 0;
 
@@ -310,6 +311,9 @@ DepthPointCloudGeometryEstimator::DepthPointCloudGeometryEstimator(
   if (config_.pixel_stride == 0) {
     throw std::invalid_argument("pixel_stride must be greater than zero");
   }
+  if (config_.max_samples == 0) {
+    throw std::invalid_argument("max_samples must be greater than zero");
+  }
   if (!std::isfinite(config_.voxel_size_m) || config_.voxel_size_m <= 0.0F) {
     throw std::invalid_argument("voxel_size_m must be greater than zero");
   }
@@ -347,14 +351,26 @@ std::optional<ObjectGeometry> DepthPointCloudGeometryEstimator::Estimate(
   const bool use_mask = detection.mask.has_value() && detection.mask->Valid() &&
                         detection.mask->width == frame.depth.width &&
                         detection.mask->height == frame.depth.height;
-  const std::size_t stride = config_.pixel_stride;
+  const std::size_t mask_stride_width =
+      use_mask ? detection.mask->StrideWidth() : 0;
+  const std::size_t area = static_cast<std::size_t>(right - left) *
+                           static_cast<std::size_t>(bottom - top);
+  std::size_t stride = config_.pixel_stride;
+  while (stride < static_cast<std::size_t>(right - left) &&
+         area / (stride * stride) > config_.max_samples) {
+    ++stride;
+  }
+  const std::size_t expected_samples =
+      std::min(config_.max_samples, area / (stride * stride) + 1);
   VoxelMap voxels;
+  voxels.reserve(expected_samples);
   for (int y = top; y < bottom; y += static_cast<int>(stride)) {
     for (int x = left; x < right; x += static_cast<int>(stride)) {
       if (use_mask) {
         const std::size_t mask_index =
-            static_cast<std::size_t>(y) * detection.mask->width +
-            static_cast<std::size_t>(x);
+            static_cast<std::size_t>(y / detection.mask->stride) *
+                mask_stride_width +
+            static_cast<std::size_t>(x / detection.mask->stride);
         if (detection.mask->values[mask_index] == 0) {
           continue;
         }

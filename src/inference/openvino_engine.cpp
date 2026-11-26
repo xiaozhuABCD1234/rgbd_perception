@@ -45,13 +45,17 @@ class OpenVinoEngine::Impl {
     const auto model = core->read_model(model_path);
     compiled = std::make_unique<ov::CompiledModel>(
         core->compile_model(model, config.device));
+    request =
+        std::make_unique<ov::InferRequest>(compiled->create_infer_request());
   }
 
   [[nodiscard]] TensorMap Infer(const TensorMap& inputs) {
     if (compiled == nullptr) {
       throw std::logic_error("OpenVINO model is not loaded");
     }
-    ov::InferRequest request = compiled->create_infer_request();
+    if (request == nullptr) {
+      throw std::logic_error("OpenVINO infer request is not initialized");
+    }
     for (const auto& port : compiled->inputs()) {
       const auto found = inputs.find(port.get_any_name());
       const Tensor* tensor = nullptr;
@@ -68,14 +72,14 @@ class OpenVinoEngine::Impl {
       }
       const ov::Tensor input_tensor(ov::element::f32, ToShape(tensor->Shape()),
                                     tensor->Bytes().data());
-      request.set_tensor(port, input_tensor);
+      request->set_tensor(port, input_tensor);
     }
-    request.infer();
+    request->infer();
 
     TensorMap outputs;
     std::size_t index = 0;
     for (const auto& port : compiled->outputs()) {
-      const ov::Tensor output = request.get_tensor(port);
+      const ov::Tensor output = request->get_tensor(port);
       if (output.get_element_type() != ov::element::f32) {
         throw std::runtime_error("OpenVINO output is not float32");
       }
@@ -104,6 +108,7 @@ class OpenVinoEngine::Impl {
   OpenVinoConfig config;
   std::unique_ptr<ov::Core> core;
   std::unique_ptr<ov::CompiledModel> compiled;
+  std::unique_ptr<ov::InferRequest> request;
 };
 
 OpenVinoEngine::OpenVinoEngine(OpenVinoConfig config)

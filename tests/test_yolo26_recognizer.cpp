@@ -113,6 +113,8 @@ RGBD_TEST(yolo26_decodes_segmentation_mask) {
   RGBD_CHECK(detections.size() == 1);
   RGBD_CHECK(detections[0].mask.has_value());
   RGBD_CHECK(detections[0].mask->Valid());
+  RGBD_CHECK(detections[0].mask->stride > 1);
+  RGBD_CHECK(detections[0].mask->values[0] == 255);
 }
 
 RGBD_TEST(yolo26_rejects_invalid_config) {
