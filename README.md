@@ -40,6 +40,7 @@ cameras/realsense -> core
 - clang-format
 - 可选：Orbbec SDK v2
 - 可选：librealsense2
+- 可选：MCAP 子模块与 Protobuf，用于 Lichtblick 输出
 
 ## 构建
 
@@ -87,7 +88,26 @@ rgbd_viewer "d435i://?width=640&height=480&fps=30" --frames 100
 rgbd_replay build/demo.rgbd
 ```
 
-`rgbd_demo` 和 `rgbd_viewer` 支持 `--record PATH`。当前录制使用测试与回放共用的内部 `.rgbd` 格式。IO 层已隔离，后续可以用 MCAP 读写器替换，不影响相机、推理和识别代码。Lichtblick 可视化计划通过 MCAP 适配器接入。
+`rgbd_demo` 和 `rgbd_viewer` 支持 `--record PATH`。当前回放使用测试与回放共用的内部 `.rgbd` 格式。
+
+### Gemini 305 + Lichtblick
+
+`rgbd_lichtblick` 从 Gemini 305 采集 RGB-D 并输出 Lichtblick 可打开的 MCAP 文件：
+
+```bash
+just gemini305-lichtblick
+rgbd_lichtblick --frames 300 --output gemini305.mcap
+```
+
+停止采集后在 Lichtblick 中打开 `gemini305.mcap`，图像话题为：
+
+```text
+/camera/color/image_raw
+/camera/depth/image_raw
+/camera/color/camera_info
+```
+
+彩色图像使用 `rgb8`，深度图像使用 `mm` 单位的 `mono16`。MCAP 写入器位于 `rgbd/io`，不依赖 ROS。
 
 ## 识别与三维定位
 

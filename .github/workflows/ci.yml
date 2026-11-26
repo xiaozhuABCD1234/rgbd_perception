@@ -15,6 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Initialize MCAP submodule
+        run: git submodule update --init --depth 1 third_party/mcap
+
       - name: Install build tools
         run: |
           sudo apt-get update

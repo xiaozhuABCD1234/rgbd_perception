@@ -87,6 +87,12 @@ gemini305 uri="gemini305://?width=640&height=480&fps=30" *args: sdk
     cmake --build --preset gemini305 --parallel
     ./build/gemini305/rgbd_viewer "{{uri}}" {{args}}
 
+gemini305-lichtblick *args: sdk
+    git submodule update --init --depth 1 -- third_party/mcap
+    cmake --preset gemini305
+    cmake --build --preset gemini305 --parallel
+    ./build/gemini305/rgbd_lichtblick {{args}}
+
 d435i uri="d435i://?width=640&height=480&fps=30" *args:
     #!/usr/bin/env bash
     set -euo pipefail
